@@ -1,5 +1,12 @@
 <?php
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; frame-ancestors 'none';");
+// LIGHTWEIGHT MODE: set to true to disable the Observatory and all external resource loading
+$lightweightMode = false;
+
+if ($lightweightMode) {
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';");
+} else {
+    header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; frame-ancestors 'none';");
+}
 ini_set('session.cookie_httponly', 1);
 ini_set('session.cookie_samesite', 'Strict');
 ini_set('session.use_strict_mode', 1);
@@ -193,6 +200,7 @@ if ($action === 'get_group_details') {
 }
 if ($action === 'get_observatory') {
     header('Content-Type: application/json');
+    if ($lightweightMode) { echo json_encode(['status'=>'disabled']); exit; }
     if (!isset($_SESSION['uid'])) { echo json_encode(['status'=>'error']); exit; }
     
     $stmt = $db->prepare("SELECT observatory_access FROM users WHERE id = ?");
@@ -320,7 +328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'request_observatory') {
-        if (!isset($_SESSION['uid'])) exit;
+        if ($lightweightMode || !isset($_SESSION['uid'])) exit;
         $db->prepare("UPDATE users SET observatory_access = 1 WHERE id = ?")->execute([$_SESSION['uid']]);
         echo json_encode(['status'=>'success']);
         exit;
@@ -617,7 +625,7 @@ if ($action === 'logout') { session_destroy(); header("Location: index.php"); ex
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Admin Panel - moreweb Messenger</title>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<?php if (!$lightweightMode): ?><link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"><?php endif; ?>
 <style>
     body { background: #0f0518; color: #eee; font-family: 'Roboto', sans-serif; margin: 0; padding: 20px; }
     .container { max-width: 1000px; margin: 0 auto; }
@@ -733,10 +741,12 @@ loadData();
 <link rel="manifest" href="?action=manifest">
 <meta name="theme-color" content="#0f0518">
 <link rel="icon" href="?action=icon" type="image/svg+xml">
+<?php if (!$lightweightMode): ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@100;300;400;700&family=Roboto:wght@100;300;400;500&display=swap" rel="stylesheet">
+<?php endif; ?>
 <style>
     body { background: #0f0518; color: #eee; font-family: 'Roboto', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
     
@@ -883,7 +893,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
 <link rel="manifest" href="?action=manifest">
 <meta name="theme-color" content="#0f0518">
 <link rel="icon" href="?action=icon" type="image/svg+xml">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@100;300;400;700&display=swap" rel="stylesheet">
+<?php if (!$lightweightMode): ?><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@100;300;400;700&display=swap" rel="stylesheet"><?php endif; ?>
 <title>moreweb Messenger</title>
 <style>
     :root { --bg:#0f0518; --rail:#0b0b0b; --panel:#1a0b2e; --border:#2f1b42; --accent:#a855f7; --text:#e0e0e0; --msg-in:#261038; --msg-out:#581c87; --sb-thumb:rgba(255,255,255,0.5); --sb-hover:rgba(255,255,255,0.7); --input-bg:#333; --pattern:#222; --hover-overlay:rgba(255,255,255,0.05); }
@@ -1221,7 +1231,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
         <div class="rail-btn" id="nav-public" onclick="switchTab('public')">
             <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
         </div>
-        <div class="rail-btn" id="nav-observatory" onclick="switchTab('observatory')">
+        <div class="rail-btn" id="nav-observatory" onclick="switchTab('observatory')" <?php if ($lightweightMode) echo 'style="display:none"'; ?>>
             <svg viewBox="0 0 24 24"><path d="M19.9,1.622a1,1,0,0,0-1.365-.52L1.562,9.388a1,1,0,0,0-.488,1.276L2.59,14.378A1,1,0,0,0,3.516,15a1.043,1.043,0,0,0,.24-.029L11,13.179v4.407L7.293,21.293a1,1,0,1,0,1.414,1.414L11,20.414V22a1,1,0,0,0,2,0V20.414l2.293,2.293a1,1,0,0,0,1.414-1.414L13,17.586v-4.9L22.24,10.4a1,1,0,0,0,.686-1.348ZM4.115,12.821l-.836-2.047L18.447,3.368l2.191,5.367Z"/></svg>
         </div>
         
@@ -1285,7 +1295,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 <div id="online-count" style="font-size:4rem;font-weight:bold;color:var(--accent)">0</div>
             </div>
         </div>
-        <div id="tab-observatory" class="tab-content" style="display:none">
+        <div id="tab-observatory" class="tab-content" style="display:none" <?php if ($lightweightMode) echo 'hidden'; ?>>
             <div class="panel-header" data-i18n="tab_observatory">Observatory</div>
             <div class="list-area">
                 <div id="obs-clocks" style="padding:15px;border-bottom:1px solid var(--border);"></div>
@@ -1427,7 +1437,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
         </div>
         
         <!-- OBSERVATORY VIEW -->
-        <div id="observatory-view" style="display:none;flex-direction:column;height:100%;width:100%;overflow-y:auto;background:var(--bg)">
+        <div id="observatory-view" style="display:none;flex-direction:column;height:100%;width:100%;overflow-y:auto;background:var(--bg)" <?php if ($lightweightMode) echo 'hidden'; ?>>
             <div class="obs-header">
                 <div class="obs-title"><div class="back-btn mobile-only" onclick="closeObs()" style="cursor:pointer;margin-right:10px">&larr;</div> <span data-i18n="tab_observatory">Observatory</span></div>
                 <div style="font-size:0.8rem;color:#888" id="obs-last-upd"></div>
@@ -1442,6 +1452,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
 <script>
 const ME = "<?php echo $_SESSION['user']; ?>";
 const CSRF_TOKEN = "<?php echo $_SESSION['csrf_token']; ?>";
+const LIGHTWEIGHT_MODE = <?php echo $lightweightMode ? 'true' : 'false'; ?>;
 let lastTyping = 0;
 let lastRead = 0;
 let mediaRec=null, audChunks=[], recMime='';
@@ -1951,6 +1962,7 @@ async function getOwnerPub(gid, ownerName){
 }
 
 function switchTab(t){
+    if(LIGHTWEIGHT_MODE && t==='observatory') return;
     S.tab=t;
     document.querySelectorAll('.rail-btn').forEach(e=>e.classList.remove('active'));
     document.getElementById('nav-'+t).classList.add('active');
