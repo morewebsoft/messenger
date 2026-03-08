@@ -170,7 +170,7 @@ if ($action === 'ping') {
 if ($action === 'get_profile') {
     header('Content-Type: application/json');
     $u = $_GET['u'] ?? '';
-    $stmt = $db->prepare("SELECT username, avatar, bio, joined_at, last_seen, public_key FROM users WHERE username = ?");
+    $stmt = $db->prepare("SELECT username, avatar, bio, joined_at, last_seen, public_key FROM users WHERE lower(username) = lower(?)");
     $stmt->execute([$u]);
     echo json_encode($stmt->fetch() ?: ['status'=>'error']);
     exit;
@@ -279,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'register') {
         $user = trim($input['username']);
         if (strlen($user) > 30) { echo json_encode(['status'=>'error','message'=>'Username too long']); exit; }
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $user)) { echo json_encode(['status'=>'error','message'=>'Use letters, numbers, _ only']); exit; }
+        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $user)) { echo json_encode(['status'=>'error','message'=>'Use letters, numbers, -, _ only']); exit; }
 
         $stmt = $db->prepare("SELECT 1 FROM users WHERE lower(username) = lower(?)");
         $stmt->execute([$user]);
@@ -1366,7 +1366,11 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 <h3 id="my-name"></h3>
                 <p id="my-date" style="color:#777;font-size:0.8rem"></p>
                 <div class="form-group"><label data-i18n="bio">Bio / Status</label><input class="form-input" id="set-bio" maxlength="50"></div>
-                <div class="form-group"><label data-i18n="avatar_url">Avatar URL</label><input class="form-input" id="set-av"></div>
+                <div class="form-group"><label data-i18n="avatar_url">Avatar</label>
+                    <div style="display:flex;gap:5px"><input class="form-input" id="set-av" <?php if ($lightweightMode) echo 'placeholder="Local URL or Data URI only"'; ?> style="flex:1">
+                    <button class="btn-sec" onclick="document.getElementById('up-av').click()">Upload</button></div>
+                    <input type="file" id="up-av" hidden accept="image/*" onchange="handleAvUpload(this)">
+                </div>
                 <div class="form-group"><label data-i18n="new_pass">New Password</label><input class="form-input" id="set-pw" type="password"></div>
                 <div class="form-group"><label data-i18n="lang_select">Language</label><select id="set-lang" class="form-select" onchange="setLang(this.value)"><option value="en">English</option><option value="fa">فارسی</option></select></div>
                 <div class="form-group"><button class="btn-sec" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:var(--panel);color:var(--text)" onclick="toggleTheme()" data-i18n="toggle_theme">Toggle Dark/Light Mode</button></div>
@@ -1385,7 +1389,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                     <h3 data-i18n="tab_about">About</h3>
                     <p style="color:#888;">moreweb Messenger v0.0.2</p>
                     <button class="btn-sec" style="margin-bottom:20px;cursor:pointer;padding:8px 16px;border-radius:20px" onclick="checkUpdates()" data-i18n="check_updates">Check for Updates</button><br>
-                    <a href="https://github.com/iWebbIO/php-messenger" target="_blank" class="about-link">GitHub Repository</a>
+                    <a href="https://github.com/iWebbIO/php-messenger" target="_blank" class="about-link" <?php if ($lightweightMode) echo 'style="display:none"'; ?>>GitHub Repository</a>
                     <br><br>
                     <button class="btn-sec" style="width:100%;padding:10px;border:1px solid #f55;color:#f55;border-radius:4px;cursor:pointer;background:transparent" onclick="if(confirm('Logout?')){localStorage.removeItem('mw_auth_token');location.href='?action=logout'}" data-i18n="logout">Logout</button>
                 </div>
@@ -1400,7 +1404,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 <p data-i18n="about_desc">A secure, self-contained messenger with ephemeral server storage and local history persistence.</p>
                 <br>
                 <button class="btn-sec" style="margin-bottom:20px;cursor:pointer;padding:8px 16px;border-radius:20px" onclick="checkUpdates()" data-i18n="check_updates">Check for Updates</button><br>
-                <a href="https://github.com/iWebbIO/php-messenger" target="_blank" class="about-link">
+                <a href="https://github.com/iWebbIO/php-messenger" target="_blank" class="about-link" <?php if ($lightweightMode) echo 'style="display:none"'; ?>>
                     <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" style="vertical-align:middle"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
                     GitHub Repository
                 </a>
@@ -1519,7 +1523,7 @@ let currentAudio=null, currentBtn=null, updateInterval=null;
 let lastPollTime = null;
 const RTC_CFG = LIGHTWEIGHT_MODE ? {iceServers:[]} : {iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
 let pc=null, localStream=null, callState='idle', callPeer=null;
-let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], notifs:[], keys:{pub:null,priv:null}, e2ee:{}, we:{active:false, ready:[]}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9) };
+let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], profiles:{}, notifs:[], keys:{pub:null,priv:null}, e2ee:{}, we:{active:false, ready:[]}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9) };
 localStorage.setItem('mw_did', S.deviceId);
 
 const TR = {
@@ -1713,7 +1717,16 @@ async function init(){
         let sc = localStorage.getItem('mw_scale');
         if(fs) { document.body.style.fontSize = fs + 'px'; if(document.getElementById('set-fs')) { document.getElementById('set-fs').value = fs; document.getElementById('lbl-fs').innerText = fs + 'px'; } }
         if(sc) { document.body.style.zoom = sc + '%'; if(document.getElementById('set-scale')) { document.getElementById('set-scale').value = sc; document.getElementById('lbl-scale').innerText = sc + '%'; } }
+        
+        // Load cached metadata for offline use
+        let cg = await get('meta', 'groups');
+        if(cg && !Array.isArray(cg)) S.groups = cg;
+        
+        let cp = await get('meta', 'users');
+        if(cp && !Array.isArray(cp)) S.profiles = cp;
+
         setLang(curLang);
+        renderLists();
         pollLoop();
         window.addEventListener('online', () => setConn(false));
         window.addEventListener('offline', () => setConn(false));
@@ -1787,6 +1800,11 @@ async function poll(){
         let d=await r.json();
         setConn(true);
         S.online=d.online;
+        
+        // Cache Profiles
+        d.online.forEach(u => { S.profiles[u.username] = u; });
+        await save('meta', 'users', S.profiles);
+
         if(d.profile){
             document.getElementById('my-av').style.backgroundImage=`url('${d.profile.avatar}')`;
             document.getElementById('my-name').innerText=d.profile.username;
@@ -1828,6 +1846,7 @@ async function poll(){
             if(S.type=='dm' && S.id==m.from_user && document.hasFocus()) req('send', {to_user:m.from_user, type:'read', extra:m.timestamp});
         }
         S.groups={}; for(let g of d.groups){ S.groups[g.id]=g; let ex=await get('group',g.id); if(!ex.length) await save('group',g.id,[]); }
+        await save('meta', 'groups', S.groups);
         for(let m of d.group_msgs){ 
             if(m.id) S.groupCursors[m.group_id] = Math.max(S.groupCursors[m.group_id] || 0, m.id);
             if(m.type=='delete'){ await removeMsg('group',m.group_id,m.extra_data); continue; }
@@ -1845,9 +1864,11 @@ async function poll(){
         await renderLists();
         if(S.type=='dm' && S.id){
              let ou=d.online.find(x=>x.username==S.id);
+             let prof = S.profiles[S.id];
              let sub=ou?(ou.bio||'Online'):'Offline';
              document.getElementById('chat-sub').innerText=sub;
-             if(ou && ou.avatar) document.getElementById('chat-av').style.backgroundImage=`url('${ou.avatar}')`;
+             let av = (ou && ou.avatar) ? ou.avatar : (prof ? prof.avatar : '');
+             if(av) document.getElementById('chat-av').style.backgroundImage=`url('${av}')`;
         }
 } catch(e){ console.error("Poll error:", e); setConn(false); }
 }
@@ -2292,7 +2313,8 @@ async function renderLists(){
                 }
                 if(last.length>30)last=last.substring(0,30)+'...';
                 let ou=S.online.find(x=>x.username==u);
-                let av=ou?ou.avatar:'';
+                let prof = S.profiles[u];
+                let av = (ou && ou.avatar) ? ou.avatar : (prof ? prof.avatar : '');
                 dms.push({key: u, u, last, av, ou, lock, ts: lastMsg ? lastMsg.timestamp : 0});
             }
         }
@@ -2353,7 +2375,8 @@ async function openChat(t,i){
     let canPost = true;
     if(t=='dm'){
         let ou=S.online.find(x=>x.username==i);
-        sub=ou?(ou.bio||'Online'):'Offline'; av=ou?ou.avatar:'';
+        let prof = S.profiles[i];
+        sub=ou?(ou.bio||'Online'):'Offline'; av=(ou && ou.avatar) ? ou.avatar : (prof ? prof.avatar : '');
         if(av) document.getElementById('chat-av').style.backgroundImage=`url('${av}')`;
         document.getElementById('chat-av').innerText=av?'':i[0];
     } else if(t=='group' || t=='channel') {
@@ -2409,6 +2432,13 @@ function createMsgNode(m, showSender, history){
         txt = `<div class="file-att" onclick="downloadFile('${m.message}', '${safeName}')">
             <svg viewBox="0 0 24 24" width="24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
             <span>${fname}</span></div>`;
+    }
+    else if(m.type=='location') {
+        let coords = esc(m.message);
+        txt = `<a href="https://www.google.com/maps?q=${coords}" target="_blank" style="text-decoration:none;color:var(--accent);display:flex;align-items:center;gap:5px;background:rgba(0,0,0,0.2);padding:8px;border-radius:5px;margin-top:5px">
+            <svg viewBox="0 0 24 24" width="20" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            <span>${coords}</span>
+        </a>`;
     }
     
     let rep='';
@@ -2715,12 +2745,12 @@ function sendLocation() {
     startProg();
     navigator.geolocation.getCurrentPosition(pos => {
         endProg();
-        let link = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+        let coords = `${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`;
         let ts = Math.floor(Date.now()/1000);
-        let ld = {message: link, type: 'text', timestamp: ts};
+        let ld = {message: coords, type: 'location', timestamp: ts};
         if(S.type=='dm') ld.to_user=S.id; else if(S.type=='group'||S.type=='channel') ld.group_id=S.id; else ld.group_id=-1;
         req('send', ld);
-        store(S.type,S.id,{from_user:ME,message:link,type:'text',timestamp:ts});
+        store(S.type,S.id,{from_user:ME,message:coords,type:'location',timestamp:ts});
         scrollToBottom(true);
         document.getElementById('att-menu').style.display='none';
     }, err => { endProg(); alertModal('Error', 'Location access denied'); });
@@ -2813,12 +2843,44 @@ async function sendFile(fileToSend) {
     }
 }
 
+async function handleAvUpload(inp) {
+    let f = inp.files[0]; if(!f) return;
+    startProg();
+    try {
+        let img = await new Promise((res,rej)=>{let i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f);});
+        let cvs = document.createElement('canvas');
+        let size = 200; 
+        let w=img.width, h=img.height;
+        let scale = Math.min(size/w, size/h);
+        if(scale < 1) { w*=scale; h*=scale; }
+        cvs.width=w; cvs.height=h;
+        cvs.getContext('2d').drawImage(img,0,0,w,h);
+        let b64 = cvs.toDataURL('image/webp', 0.8);
+        document.getElementById('set-av').value = b64;
+        document.getElementById('my-av').style.backgroundImage = `url('${b64}')`;
+    } catch(e) { console.error(e); alertModal('Error', 'Image processing failed'); }
+    endProg();
+}
+
 function downloadFile(data, name){
     let a = document.createElement('a'); a.href = data; a.download = name; a.click();
 }
 
 function cancelReply(){ S.reply=null; document.getElementById('reply-ui').style.display='none'; document.getElementById('del-btn').style.display='none'; }
-function promptChat(){ promptModal("New Chat", "Username:", async (u)=>{ if(u){ let ex=await get('dm',u); if(!ex.length) await save('dm',u,[]); openChat('dm',u); switchTab('chats'); }}); }
+function promptChat(){ promptModal("New Chat", "Username:", async (u)=>{ 
+    if(!u) return;
+    if(!/^[a-zA-Z0-9_-]+$/.test(u)){ alertModal('Error','Invalid username format'); return; }
+    startProg();
+    let r = await fetch('?action=get_profile&u='+u);
+    endProg();
+    let d = await r.json();
+    if(d.status=='error'){ alertModal('Error','User not found'); return; }
+    let realU = d.username;
+    let ex=await get('dm',realU); 
+    if(!ex.length) await save('dm',realU,[]); 
+    openChat('dm',realU); 
+    switchTab('chats'); 
+}); }
 
 function createGroup(){ createEntity('group'); }
 function createChannel(){ createEntity('channel'); }
