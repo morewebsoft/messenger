@@ -955,7 +955,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .list-item.active { background:rgba(255,255,255,0.15); border-left:4px solid var(--accent); padding-left:11px; }
     .avatar { width:40px; height:40px; border-radius:50%; background:#444; margin-right:12px; display:flex; align-items:center; justify-content:center; font-weight:bold; background-size:cover; flex-shrink:0; }
     
-    .main-view { flex:1; display:flex; flex-direction:column; background:var(--bg); background-image:radial-gradient(var(--pattern) 1px, transparent 1px); background-size:20px 20px; position:relative; min-height:0; }
+    .main-view { flex:1; display:flex; flex-direction:column; background:var(--bg); background-image:radial-gradient(var(--pattern) 1px, transparent 1px); background-size:20px 20px; position:relative; min-height:0; min-width:0; }
     .chat-header { height:60px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; }
     .header-actions { display:flex; gap:15px; position:relative; }
     .chat-info-clickable { cursor: pointer; }
@@ -973,7 +973,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .red-text { color: #ff5555; }
 
     .messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:5px; overscroll-behavior-y: contain; }
-    .msg { max-width:65%; padding:8px 12px; border-radius:8px; font-size:0.95rem; line-height:1.4; position:relative; word-wrap:break-word; }
+    .msg { max-width:65%; padding:8px 12px; border-radius:8px; font-size:0.95rem; line-height:1.4; position:relative; word-wrap:break-word; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
     .msg.in { align-self:flex-start; background:var(--msg-in); border-top-left-radius:0; border:1px solid transparent; }
     .msg.out { align-self:flex-end; background:var(--msg-out); border-top-right-radius:0; }
     .msg img { max-width:100%; border-radius:4px; margin-top:5px; cursor:pointer; }
@@ -1019,7 +1019,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .modal-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000; display:none; align-items:center; justify-content:center; }
     .modal-box { background:var(--panel); padding:20px; border-radius:12px; width:300px; border:1px solid var(--border); box-shadow:0 10px 30px #000; }
     .modal-title { margin:0 0 10px 0; font-size:1.1rem; font-weight:bold; }
-    .modal-body { color:#ccc; font-size:0.9rem; margin-bottom:15px; }
+    .modal-body { color:#ccc; font-size:0.9rem; margin-bottom:15px; overflow-wrap: anywhere; }
     .modal-btns { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
     .btn-modal { padding:8px 16px; border-radius:6px; cursor:pointer; border:none; font-weight:bold; }
     .btn-sec { background:transparent; color:#aaa; border:1px solid #444; }
