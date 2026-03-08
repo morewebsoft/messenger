@@ -570,16 +570,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $myProfile = $db->prepare("SELECT username, avatar, joined_at, bio FROM users WHERE id = ?");
         $myProfile->execute([$myId]);
 
-        // DMs (Fetch & Delete)
-        $db->beginTransaction();
+        // ACKs
+        if (!empty($input['ack_dms'])) {
+            $ids = implode(',', array_map('intval', $input['ack_dms']));
+            if ($ids) $db->exec("DELETE FROM messages WHERE id IN ($ids) AND to_user = " . $db->quote($me));
+        }
+        if (!empty($input['group_cursors'])) {
+            $stmt = $db->prepare("UPDATE group_members SET last_received_id = ? WHERE group_id = ? AND user_id = ?");
+            foreach ($input['group_cursors'] as $gid => $lid) {
+                $stmt->execute([(int)$lid, (int)$gid, $myId]);
+            }
+        }
+
+        // DMs (Fetch)
         $stmt = $db->prepare("SELECT * FROM messages WHERE to_user = ? ORDER BY id ASC");
         $stmt->execute([$me]);
         $dms = $stmt->fetchAll();
-        if (!empty($dms)) {
-            $ids = implode(',', array_column($dms, 'id'));
-            $db->exec("DELETE FROM messages WHERE id IN ($ids)");
-        }
-        $db->commit();
 
         // Groups
         $groups = $db->prepare("SELECT g.id, g.name, g.type, g.join_code, g.category, g.owner_id, gm.last_received_id FROM groups g JOIN group_members gm ON g.id=gm.group_id WHERE gm.user_id=?");
@@ -593,8 +599,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msgs = $stmt->fetchAll();
             if($msgs) {
                 $grpMsgs = array_merge($grpMsgs, $msgs);
-                $last = end($msgs)['id'];
-                $db->prepare("UPDATE group_members SET last_received_id = ? WHERE group_id = ? AND user_id = ?")->execute([$last, $g['id'], $myId]);
             }
         }
     
@@ -1370,7 +1374,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 
                 <div class="mobile-only" style="margin-top:30px;border-top:1px solid var(--border);padding-top:20px">
                     <h3 data-i18n="tab_about">About</h3>
-                    <p style="color:#888;">moreweb Messenger v0.0.1</p>
+                    <p style="color:#888;">moreweb Messenger v0.0.2</p>
                     <button class="btn-sec" style="margin-bottom:20px;cursor:pointer;padding:8px 16px;border-radius:20px" onclick="checkUpdates()" data-i18n="check_updates">Check for Updates</button><br>
                     <a href="https://github.com/iWebbIO/php-messenger" target="_blank" class="about-link">GitHub Repository</a>
                     <br><br>
@@ -1506,7 +1510,8 @@ let currentAudio=null, currentBtn=null, updateInterval=null;
 let lastPollTime = null;
 const RTC_CFG = {iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
 let pc=null, localStream=null, callState='idle', callPeer=null;
-let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], notifs:[], keys:{pub:null,priv:null}, e2ee:{}, we:{active:false, ready:[]}, scroll:{} };
+let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], notifs:[], keys:{pub:null,priv:null}, e2ee:{}, we:{active:false, ready:[]}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9) };
+localStorage.setItem('mw_did', S.deviceId);
 
 const TR = {
 
@@ -1725,13 +1730,14 @@ function endProg(){
 }
 
 async function req(act, data) {
-    if(act!='poll' && act!='typing') startProg();
+    let silent = act=='poll' || act=='typing' || (act=='send' && data && data.type=='wsync');
+    if(!silent) startProg();
     let r = await fetch('?action='+act, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
         body: JSON.stringify(data||{})
     });
-    if(act!='poll' && act!='typing') endProg();
+    if(!silent) endProg();
     return r;
 }
 
@@ -1759,7 +1765,15 @@ async function poll(){
         let lastPub = 0;
         let pubH = await get('public', 'global');
         if(pubH.length) lastPub = pubH[pubH.length-1].id || 0;
-        let r=await req('poll', {last_pub: lastPub});
+        
+        let payload = {last_pub: lastPub};
+        if(S.ackDms.length > 0) payload.ack_dms = S.ackDms;
+        if(Object.keys(S.groupCursors).length > 0) payload.group_cursors = S.groupCursors;
+
+        let r=await req('poll', payload);
+        
+        if(r.ok) { S.ackDms = []; S.groupCursors = {}; }
+
         lastPollTime = new Date();
         let d=await r.json();
         setConn(true);
@@ -1771,6 +1785,8 @@ async function poll(){
             document.getElementById('my-date').innerText="Joined: "+new Date(d.profile.joined_at*1000).toLocaleDateString();
         }
         for(let m of d.dms){
+            if(m.id && !S.ackDms.includes(m.id)) S.ackDms.push(m.id);
+            if(m.type=='wsync'){ handleWSyncMsg(m); continue; }
             if(m.type=='delete'){ await removeMsg('dm',m.from_user,m.extra_data); continue; }
             if(m.type=='read'){ 
                 let h=await get('dm',m.from_user); 
@@ -1794,12 +1810,14 @@ async function poll(){
         }
         S.groups={}; for(let g of d.groups){ S.groups[g.id]=g; let ex=await get('group',g.id); if(!ex.length) await save('group',g.id,[]); }
         for(let m of d.group_msgs){ 
+            if(m.id) S.groupCursors[m.group_id] = Math.max(S.groupCursors[m.group_id] || 0, m.id);
             if(m.type=='delete'){ await removeMsg('group',m.group_id,m.extra_data); continue; }
             await store('group',m.group_id,m); 
             let prev = m.type==='text' ? m.message : '['+m.type+']';
             notify(m.group_id, prev, 'group'); 
         }
         for(let m of d.public_msgs){
+            if(m.type=='delete'){ await removeMsg('public','global',m.extra_data); continue; }
             await store('public','global',m);
             if(S.tab!='public') notify('global', m.message, 'public');
         }
@@ -1877,7 +1895,10 @@ async function get(t,i){ return (await dbOp('readonly', s => s.get(`mw_${t}_${i}
 async function save(t,i,d){ try { await dbOp('readwrite', s => s.put(d, `mw_${t}_${i}`)); } catch(e){ console.error("Save failed", e); } }
 async function store(t,i,m){
     let h = await get(t,i);
-    let idx = h.findIndex(x=>x.timestamp==m.timestamp && x.message==m.message);
+    let idx = -1;
+    if(m.id) idx = h.findIndex(x => x.id == m.id);
+    if(idx === -1) idx = h.findIndex(x => x.timestamp == m.timestamp && x.message == m.message);
+    
     if(idx !== -1) {
         if(!m.pending && h[idx].pending) {
             h[idx] = m;
@@ -1892,12 +1913,16 @@ async function store(t,i,m){
         if(tg){ if(!tg.reacts)tg.reacts={}; tg.reacts[m.from_user]=m.message; await save(t,i,h); if(S.id==i && S.type==t) renderChat(); }
         return;
     }
-    h.push(m); await save(t,i,h);
+    h.push(m); 
+    h.sort((a,b)=>a.timestamp-b.timestamp);
+    await save(t,i,h);
     if(S.id==i && S.type==t) {
-        let prev = h.length>1 ? h[h.length-2] : null;
-        let show = (t=='public'||t=='group'||t=='channel') && m.from_user!=ME && (!prev || prev.from_user!=m.from_user);
-        document.getElementById('msgs').appendChild(createMsgNode(m, show, h));
-        scrollToBottom(false);
+        if(h[h.length-1].timestamp == m.timestamp) {
+            let prev = h.length>1 ? h[h.length-2] : null;
+            let show = (t=='public'||t=='group'||t=='channel') && m.from_user!=ME && (!prev || prev.from_user!=m.from_user);
+            document.getElementById('msgs').appendChild(createMsgNode(m, show, h));
+            scrollToBottom(false);
+        } else renderChat();
     }
 }
 async function removeMsg(t,i,ts){
@@ -3146,6 +3171,110 @@ function showCallUI(mode, name) {
 function toggleMic(btn) { let t=localStream.getAudioTracks()[0]; t.enabled=!t.enabled; btn.style.background=t.enabled?'rgba(255,255,255,0.2)':'#f44'; }
 function toggleCam(btn) { let t=localStream.getVideoTracks()[0]; t.enabled=!t.enabled; btn.style.background=t.enabled?'rgba(255,255,255,0.2)':'#f44'; }
 
+// --- WSYNC (Local Sync) ---
+async function sendWSyncSignal(type, data, targetId) {
+    let payload = { s: S.deviceId, t: type, d: data };
+    if(targetId) payload.tg = targetId;
+    req('send', { to_user: ME, type: 'wsync', message: JSON.stringify(payload) });
+}
+
+async function handleWSyncMsg(m) {
+    if(m.from_user !== ME) return;
+    let p; try { p = JSON.parse(m.message); } catch(e){ return; }
+    if(p.s === S.deviceId) return;
+    if(p.tg && p.tg !== S.deviceId) return;
+
+    let peerId = p.s;
+    if(p.t === 'hello') {
+        initWSyncPeer(peerId, true);
+    } else if(p.t === 'offer') {
+        await initWSyncPeer(peerId, false);
+        let pc = S.wsync.peers[peerId];
+        await pc.setRemoteDescription(p.d);
+        let ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        sendWSyncSignal('answer', ans, peerId);
+    } else if(p.t === 'answer') {
+        let pc = S.wsync.peers[peerId];
+        if(pc) await pc.setRemoteDescription(p.d);
+    } else if(p.t === 'ice') {
+        let pc = S.wsync.peers[peerId];
+        if(pc) await pc.addIceCandidate(p.d);
+    }
+}
+
+async function initWSyncPeer(peerId, initiator) {
+    if(S.wsync.peers[peerId]) return;
+    let pc = new RTCPeerConnection(RTC_CFG);
+    S.wsync.peers[peerId] = pc;
+    
+    pc.onicecandidate = e => { if(e.candidate) sendWSyncSignal('ice', e.candidate, peerId); };
+    pc.onconnectionstatechange = () => {
+        if(pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            delete S.wsync.peers[peerId]; delete S.wsync.dc[peerId];
+        }
+    };
+
+    if(initiator) {
+        let dc = pc.createDataChannel("wsync");
+        setupDC(dc, peerId);
+        let off = await pc.createOffer();
+        await pc.setLocalDescription(off);
+        sendWSyncSignal('offer', off, peerId);
+    } else {
+        pc.ondatachannel = e => setupDC(e.channel, peerId);
+    }
+}
+
+function setupDC(dc, peerId) {
+    S.wsync.dc[peerId] = dc;
+    dc.onopen = () => { startSync(peerId); showToast("WSync: Connected"); };
+    dc.onmessage = e => handleSyncData(peerId, JSON.parse(e.data));
+}
+
+async function startSync(peerId) {
+    let summary = { dm: {}, group: {} };
+    let keys = await dbOp('readonly', s => s.getAllKeys());
+    for(let k of keys) {
+        if(k.startsWith('mw_dm_')) {
+            let u = k.split('mw_dm_')[1];
+            let h = await get('dm', u);
+            summary.dm[u] = h.slice(-20).map(x => x.timestamp);
+        } else if(k.startsWith('mw_group_')) {
+            let gid = k.split('mw_group_')[1];
+            let h = await get('group', gid);
+            summary.group[gid] = h.slice(-20).map(x => x.timestamp);
+        }
+    }
+    let dc = S.wsync.dc[peerId];
+    if(dc && dc.readyState === 'open') dc.send(JSON.stringify({ t: 'summary', d: summary }));
+}
+
+async function handleSyncData(peerId, data) {
+    if(data.t === 'summary') {
+        let missing = { dm: {}, group: {} }, reqCount = 0;
+        for(let u in data.d.dm) {
+            let h = await get('dm', u), myTs = h.map(x => x.timestamp);
+            let diff = data.d.dm[u].filter(ts => !myTs.includes(ts));
+            if(diff.length) { missing.dm[u] = diff; reqCount += diff.length; }
+        }
+        for(let gid in data.d.group) {
+            let h = await get('group', gid), myTs = h.map(x => x.timestamp);
+            let diff = data.d.group[gid].filter(ts => !myTs.includes(ts));
+            if(diff.length) { missing.group[gid] = diff; reqCount += diff.length; }
+        }
+        if(reqCount > 0) S.wsync.dc[peerId].send(JSON.stringify({ t: 'req', d: missing }));
+    } else if(data.t === 'req') {
+        let payload = [];
+        for(let u in data.d.dm) { let h = await get('dm', u); h.filter(x => data.d.dm[u].includes(x.timestamp)).forEach(m => payload.push({ cat: 'dm', id: u, m: m })); }
+        for(let gid in data.d.group) { let h = await get('group', gid); h.filter(x => data.d.group[gid].includes(x.timestamp)).forEach(m => payload.push({ cat: 'group', id: gid, m: m })); }
+        S.wsync.dc[peerId].send(JSON.stringify({ t: 'push', d: payload }));
+    } else if(data.t === 'push') {
+        for(let item of data.d) await store(item.cat, item.id, item.m);
+        if(data.d.length) { showToast(`WSync: Synced ${data.d.length} msgs`); renderLists(); }
+    }
+}
+
 // Mobile Swipe Back
 let tSX=0, tSY=0;
 const mv = document.getElementById('main-view');
@@ -3187,6 +3316,7 @@ setInterval(updateWorldClocks, 1000);
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
 init().catch(e=>console.error(e));
+setTimeout(() => sendWSyncSignal('hello'), 2000);
 
 </script>
 </body>
