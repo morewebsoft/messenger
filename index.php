@@ -2352,7 +2352,11 @@ async function renderLists(){
                 dms.push({key: u, u, last, av, ou, lock, ts: lastMsg ? lastMsg.timestamp : 0});
             }
         }
-        dms.sort((a,b) => b.ts - a.ts);
+        dms.sort((a,b) => {
+            if(a.type === 'public') return -1;
+            if(b.type === 'public') return 1;
+            return b.ts - a.ts;
+        });
 
         updateListDOM('list-chats', dms, renderDmItem);
 
