@@ -981,7 +981,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .avatar { width:40px; height:40px; border-radius:50%; background:#444; margin-right:12px; display:flex; align-items:center; justify-content:center; font-weight:bold; background-size:cover; flex-shrink:0; }
     
     .main-view { flex:1; display:flex; flex-direction:column; background:var(--bg); background-image:radial-gradient(var(--pattern) 1px, transparent 1px); background-size:20px 20px; position:relative; min-height:0; min-width:0; }
-    .chat-header { height:60px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; }
+    .chat-header { height:60px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; flex-shrink: 0; }
     .header-actions { display:flex; gap:15px; position:relative; }
     .chat-info-clickable { cursor: pointer; }
     
@@ -1113,8 +1113,8 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .att-loc { background: linear-gradient(135deg, #ff9966, #ff5e62); }
     @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
     
-    /* Emoji Drawer */
-    .emoji-drawer { height: 280px; background: var(--panel); border-top: 1px solid var(--border); display: none; flex-direction: column; animation: slideUp 0.2s ease-out; z-index: 90; }
+    /* Emoji Drawer / Sidebar */
+    .emoji-drawer { background: var(--panel); display: none; flex-direction: column; z-index: 90; }
     .emoji-tabs { display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1); }
     .emoji-tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; color: #888; transition: 0.2s; font-size: 0.9rem; font-weight: 500; }
     .emoji-tab:hover { background: rgba(255,255,255,0.05); }
@@ -1130,6 +1130,24 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .gif-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
     .gif-item { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; cursor: pointer; }
     .emoji-search { padding: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text); width: 100%; box-sizing: border-box; border-radius: 4px; margin-bottom: 10px; }
+
+    @media (min-width: 769px) {
+        .main-view { flex-direction: row; }
+        #chat-view { width: auto !important; flex: 1; }
+        .emoji-drawer { width: 300px; border-left: 1px solid var(--border); height: 100%; position: relative; animation: slideLeft 0.2s ease-out; }
+        .emoji-drawer.popover { position: absolute; bottom: 80px; left: 20px; width: 320px; height: 400px; border-radius: 8px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid var(--border); animation: fadeUp 0.1s ease-out; z-index: 100; }
+        @keyframes slideLeft { from { width: 0; opacity: 0; } to { width: 300px; opacity: 1; } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    }
+    @media (max-width: 768px) {
+        .emoji-drawer {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%;
+            height: 280px;
+            border-top: 1px solid var(--border);
+            animation: slideUp 0.2s ease-out;
+        }
+    }
 
     @keyframes sequentialReplace { 0%, 100% { opacity: 0; transform: translateX(-50%) scale(0.95); } 15% { opacity: 1; transform: translateX(-50%) scale(1); } 30% { opacity: 1; transform: translateX(-50%) scale(1); } 45% { opacity: 0; transform: translateX(-50%) scale(0.95); } }
     @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }
@@ -1545,6 +1563,8 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 <span class="att-label" data-i18n="location">Location</span>
             </div>
         </div>
+        </div>
+        
         <!-- Emoji Drawer -->
         <div id="emoji-drawer" class="emoji-drawer">
             <div class="emoji-tabs">
@@ -1553,7 +1573,6 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 <div class="emoji-tab" id="tab-em-gif" onclick="switchEmojiTab('gif')">GIFs</div>
             </div>
             <div id="emoji-content" class="emoji-content emoji-grid"></div>
-        </div>
         </div>
         
         <!-- OBSERVATORY VIEW -->
@@ -1579,6 +1598,7 @@ let mediaRec=null, audChunks=[], recMime='';
 let pendingFile = null;
 let currentAudio=null, currentBtn=null, updateInterval=null;
 let lastPollTime = null;
+let emojiPinned = false;
 const RTC_CFG = LIGHTWEIGHT_MODE ? {iceServers:[]} : {iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
 let pc=null, localStream=null, callState='idle', callPeer=null;
 let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], profiles:{}, notifs:[], keys:{pub:null,priv:null}, e2ee:{}, we:{active:false, ready:[]}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9), stickers:[], gifs:[] };
@@ -3215,7 +3235,6 @@ function esc(t){ return t?t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/
 document.getElementById('txt').onkeydown=e=>{if(e.key=='Enter' && !e.shiftKey){e.preventDefault();send()}};
 document.getElementById('txt').onkeydown=e=>{if(e.key=='Enter' && !e.shiftKey){e.preventDefault();handleMainBtn()}};
 document.getElementById('txt').addEventListener('focus', () => { document.getElementById('att-menu').style.display = 'none'; });
-    document.getElementById('txt').addEventListener('focus', () => { document.getElementById('emoji-drawer').style.display = 'none'; });
 
 async function startRec(){
     try{
@@ -3611,14 +3630,50 @@ async function handleSyncData(peerId, data) {
 
 // --- EMOJI DRAWER ---
 const EMOJIS = "😀 😃 😄 😁 😆 😅 😂 🤣 🥲 🥹 ☺️ 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥸 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫣 🤭 🫢 🫡 🤫 🫠 🤥 😶 🫥 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 😵‍💫 🫨 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 👹 👺 🤡 💩 👻 💀 ☠️ 👽 👾 🤖 🎃 😺 😸 😹 😻 😼 😽 🙀 😿 😾 🫶 👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🫶 👐 🙌 🫶 🤝 🙏 ✍️ 💅 🤳 💪 🦵 🦶 👂 🦻 👃 🧠 🫀 🫁 🦷 🦴 👀 👁️ 👅 👄 🫦 💋 🩸";
+const EMOJI_ARR = EMOJIS.split(' ');
 let currentEmojiTab = 'emoji';
+
+let btnEm = document.getElementById('btn-emoji');
+let drw = document.getElementById('emoji-drawer');
+
+btnEm.onmouseenter = () => {
+    if(window.innerWidth > 768 && !emojiPinned) {
+        drw.style.display = 'flex';
+        drw.classList.add('popover');
+        switchEmojiTab(currentEmojiTab);
+    }
+};
+btnEm.onmouseleave = () => {
+    if(window.innerWidth > 768 && !emojiPinned) {
+        setTimeout(()=>{ if(!drw.matches(':hover')) { drw.style.display = 'none'; drw.classList.remove('popover'); } }, 100);
+    }
+};
+drw.onmouseleave = () => {
+    if(window.innerWidth > 768 && !emojiPinned) {
+        drw.style.display = 'none';
+        drw.classList.remove('popover');
+    }
+};
 
 function toggleEmojiDrawer() {
     let d = document.getElementById('emoji-drawer');
-    let wasVisible = d.style.display === 'flex';
+    if(window.innerWidth <= 768) {
+        let wasVisible = d.style.display === 'flex';
+        document.getElementById('att-menu').style.display = 'none';
+        d.style.display = wasVisible ? 'none' : 'flex';
+        if(!wasVisible) switchEmojiTab(currentEmojiTab);
+        return;
+    }
+    
     document.getElementById('att-menu').style.display = 'none';
-    d.style.display = wasVisible ? 'none' : 'flex';
-    if(!wasVisible) {
+    
+    if(emojiPinned) {
+        emojiPinned = false;
+        d.style.display = 'none';
+    } else {
+        emojiPinned = true;
+        d.classList.remove('popover');
+        d.style.display = 'flex';
         switchEmojiTab(currentEmojiTab);
     }
 }
@@ -3631,15 +3686,17 @@ function switchEmojiTab(tab) {
     c.innerHTML = '';
     c.className = 'emoji-content';
     
+    let frag = document.createDocumentFragment();
+    
     if(tab === 'emoji') {
         c.classList.add('emoji-grid');
-        EMOJIS.split(' ').forEach(e => {
+        EMOJI_ARR.forEach(e => {
             if(!e) return;
             let el = document.createElement('div');
             el.className = 'emoji-item';
             el.innerText = e;
             el.onclick = () => insertEmoji(e);
-            c.appendChild(el);
+            frag.appendChild(el);
         });
     } else if(tab === 'sticker') {
         c.classList.add('sticker-grid');
@@ -3648,14 +3705,14 @@ function switchEmojiTab(tab) {
         addBtn.className = 'sticker-item sticker-add-btn';
         addBtn.innerHTML = '+';
         addBtn.onclick = () => createSticker();
-        c.appendChild(addBtn);
+        frag.appendChild(addBtn);
 
         S.stickers.forEach(s => {
             let el = document.createElement('img');
             el.className = 'sticker-item';
             el.src = s;
-            el.onclick = () => { sendSticker(s, 'sticker'); toggleEmojiDrawer(); };
-            c.appendChild(el);
+            el.onclick = () => { sendSticker(s, 'sticker'); };
+            frag.appendChild(el);
         });
     } else if(tab === 'gif') {
         c.classList.add('gif-grid');
@@ -3664,7 +3721,7 @@ function switchEmojiTab(tab) {
         addBtn.className = 'gif-item sticker-add-btn';
         addBtn.innerHTML = '+';
         addBtn.onclick = () => createGif();
-        c.appendChild(addBtn);
+        frag.appendChild(addBtn);
 
         S.gifs.forEach(url => {
             let el = document.createElement('video');
@@ -3674,10 +3731,11 @@ function switchEmojiTab(tab) {
             el.loop = true;
             el.muted = true;
             el.playsInline = true;
-            el.onclick = () => { sendSticker(url, 'gif'); toggleEmojiDrawer(); };
-            c.appendChild(el);
+            el.onclick = () => { sendSticker(url, 'gif'); };
+            frag.appendChild(el);
         });
     }
+    c.appendChild(frag);
 }
 
 function insertEmoji(char) {
