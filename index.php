@@ -985,8 +985,8 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .list-item.active { background:rgba(255,255,255,0.15); border-left:4px solid var(--accent); padding-left:11px; }
     @media (min-width: 769px) {
         .list-item[data-key="global"].active {
-            box-shadow: 0 0 15px #ffeb3b, inset 0 0 10px rgba(255, 235, 59, 0.2);
-            border-left: none;
+            border: 2px solid #ffeb3b;
+            border-radius: 10px;
             padding-left: 15px;
             z-index: 5;
         }
