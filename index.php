@@ -561,9 +561,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         session_write_close();
         // Cleanup old messages (1% chance)
         if (rand(1, 100) === 1) {
-            $t24h = time() - 86400;
-            // 24 hours for everything - Exclude Discoverable Channels (Permanent)
-            $db->exec("DELETE FROM messages WHERE timestamp < $t24h AND (group_id IS NULL OR group_id NOT IN (SELECT id FROM groups WHERE category = 'channel' AND type = 'discoverable'))");
+            $now = time();
+            $t24h = $now - 86400;
+            $t7d = $now - 604800;
+
+            // 1. DMs (group_id IS NULL) -> 24h
+            $db->exec("DELETE FROM messages WHERE group_id IS NULL AND timestamp < $t24h");
+            // 2. Groups (category='group') -> 24h
+            $db->exec("DELETE FROM messages WHERE group_id IN (SELECT id FROM groups WHERE category = 'group') AND timestamp < $t24h");
+            // 3. Channels (category='channel') NOT discoverable -> 7 days
+            $db->exec("DELETE FROM messages WHERE group_id IN (SELECT id FROM groups WHERE category = 'channel' AND type != 'discoverable') AND timestamp < $t7d");
+            // 4. Public Chat (group_id = -1) -> 5 mins (Keep existing ephemeral nature)
+            $db->exec("DELETE FROM messages WHERE group_id = -1 AND timestamp < " . ($now - 300));
         }
 
         // Self Profile
@@ -871,23 +880,34 @@ async function sub(){
     if(!u||!p){let e=document.getElementById('err');e.innerText="Please fill in all fields";e.style.display='block';return;}
     document.body.classList.add('login-process');
     let btn=document.querySelector('button');btn.disabled=true;btn.innerText=TR[curLang].proc;
-    let r=await fetch('?action='+(reg?'register':'login'),{
-        method:'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
-        body:JSON.stringify({username:u,password:p})
-    });
-    let d=await r.json();
-    if(d.status=='success'){ if(d.token)localStorage.setItem('mw_auth_token',d.token); location.reload(); }
-    else{document.body.classList.remove('login-process');let e=document.getElementById('err');e.innerText=d.message;e.style.display='block';btn.disabled=false;applyLang();}
+    try {
+        let r=await fetch('?action='+(reg?'register':'login'),{
+            method:'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+            body:JSON.stringify({username:u,password:p})
+        });
+        let txt = await r.text();
+        let d;
+        try { d = JSON.parse(txt); } catch(e) { throw new Error(txt.substring(0, 150) || 'Server Error'); }
+        
+        if(d.status=='success'){ if(d.token)localStorage.setItem('mw_auth_token',d.token); location.reload(); }
+        else{ throw new Error(d.message); }
+    } catch(e) {
+        document.body.classList.remove('login-process');let el=document.getElementById('err');el.innerText=e.message;el.style.display='block';btn.disabled=false;applyLang();
+    }
 }
 if(localStorage.getItem('mw_auth_token')){
     document.body.classList.add('login-process');
     fetch('?action=restore_session',{
         method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF_TOKEN},
         body:JSON.stringify({token:localStorage.getItem('mw_auth_token')})
-    }).then(r=>r.json()).then(d=>{
-        if(d.status=='success')location.reload(); else {localStorage.removeItem('mw_auth_token');document.body.classList.remove('login-process');}
-    }).catch(()=>{document.body.classList.remove('login-process');});
+    })
+    .then(r=>r.text())
+    .then(t=>{ try { return JSON.parse(t); } catch(e){ throw new Error(); } })
+    .then(d=>{
+        if(d.status=='success')location.reload(); else throw new Error();
+    })
+    .catch(()=>{ localStorage.removeItem('mw_auth_token'); document.body.classList.remove('login-process'); });
 }
 setLang(curLang);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
@@ -1498,7 +1518,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 </div>
                 <textarea id="txt" rows="1" placeholder="Type a message..." enterkeyhint="send"></textarea>
             </div>
-            <button class="btn-icon" id="btn-att" onclick="toggleEmojiDrawer()">
+            <button class="btn-icon" id="btn-att" onclick="handleAttClick(event)">
                 <svg viewBox="0 0 24 24" width="24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
             </button>
             <button class="btn-icon" id="btn-send" style="color:var(--accent)" onmousedown="event.preventDefault()" onclick="handleMainBtn()">
@@ -1598,8 +1618,8 @@ const TR = {
 let curLang = localStorage.getItem('mw_lang') || 'en';
 
 function setLang(l) {
-    curLang = l; localStorage.setItem('mw_lang', l);
-    document.body.classList.toggle('rtl', l=='fa');
+    curLang = TR[l] ? l : 'en'; localStorage.setItem('mw_lang', curLang);
+    document.body.classList.toggle('rtl', curLang=='fa');
     document.getElementById('set-lang').value = l;
     applyLang();
     renderLists(); // Re-render lists to update static texts inside them if any
@@ -2281,7 +2301,6 @@ function updateListDOM(id, list, renderer) {
 function renderDmItem(el, d, isUpdate) {
     let isActive = S.id == d.u && S.type == 'dm';
     if(!isUpdate) {
-        el.onclick = () => openChat('dm', d.u);
         el.onclick = () => openChat(d.type||'dm', d.key);
         el.oncontextmenu = (e) => onChatListContext(e, 'dm', d.u);
         el.innerHTML = `<div class="avatar"></div>
@@ -2358,7 +2377,7 @@ function renderGroupItem(el, item, isUpdate) {
 
 async function renderLists(){
     try {
-        const t = TR[curLang];
+        const t = TR[curLang] || TR['en'];
         let chatFilter = document.getElementById('chat-search').value.toLowerCase();
         let groupFilter = document.getElementById('group-search') ? document.getElementById('group-search').value.toLowerCase() : '';
         let channelFilter = document.getElementById('channel-search') ? document.getElementById('channel-search').value.toLowerCase() : '';
@@ -2374,6 +2393,8 @@ async function renderLists(){
              if(pubLast.type === 'image') pubMsg = '📷 Image';
              else if(pubLast.type === 'audio') pubMsg = '🎤 Voice Message';
              else if(pubLast.type === 'file') pubMsg = '📁 File';
+             else if(pubLast.type === 'sticker') pubMsg = '💟 Sticker';
+             else if(pubLast.type === 'gif') pubMsg = '🎞️ GIF';
              else pubMsg = esc(pubLast.message || '');
         }
         dms.push({key: 'global', u: t.tab_public + ' Chat', last: pubMsg, type: 'public', isPublic: true, ts: pubLast ? pubLast.timestamp : 0, lock: '', onlineCount: S.online.length});
@@ -2390,6 +2411,8 @@ async function renderLists(){
                     if(lastMsg.type === 'image') last = '📷 Image';
                     else if(lastMsg.type === 'audio') last = '🎤 Voice Message';
                     else if(lastMsg.type === 'file') last = '📁 File';
+                    else if(lastMsg.type === 'sticker') last = '💟 Sticker';
+                    else if(lastMsg.type === 'gif') last = '🎞️ GIF';
                     else last = esc(lastMsg.message || '');
                 }
                 if(last.length>30)last=last.substring(0,30)+'...';
@@ -2430,9 +2453,10 @@ async function renderLists(){
         
         updateListDOM('list-groups', groupsList, renderGroupItem);
         updateListDOM('list-channels', channelsList, renderGroupItem);
-
-        let sp=document.getElementById('app-splash'); if(sp){ sp.style.transition='opacity 0.2s'; sp.style.opacity=0; setTimeout(()=>sp.remove(),200); }
     } catch(e) { console.error("RenderLists error", e); }
+    finally {
+        let sp=document.getElementById('app-splash'); if(sp){ sp.style.transition='opacity 0.2s'; sp.style.opacity=0; setTimeout(()=>sp.remove(),200); }
+    }
 }
 
 async function openChat(t,i){
@@ -2535,7 +2559,7 @@ function createMsgNode(m, showSender, history){
         let p=history.find(x=>x.timestamp==m.reply_to_id);
         if(p) {
 
-            let rTxt = p.type == 'image' ? '📷 Image' : (p.type == 'audio' ? '🎤 Audio' : (p.type == 'file' ? '📁 File' : esc(p.message).substring(0, 30) + '...'));
+            let rTxt = p.type == 'image' ? '📷 Image' : (p.type == 'audio' ? '🎤 Audio' : (p.type == 'file' ? '📁 File' : (p.type == 'sticker' ? '💟 Sticker' : (p.type == 'gif' ? '🎞️ GIF' : esc(p.message).substring(0, 30) + '...'))));
             rep=`<div style="font-size:0.8em;border-left:2px solid var(--accent);padding-left:4px;margin-bottom:4px;opacity:0.7;cursor:pointer" onclick="scrollToMsg(${m.reply_to_id})">Reply to <b>${esc(p.from_user)}</b>: ${rTxt}</div>`;
         }
     }
@@ -3522,7 +3546,7 @@ function setupDC(dc, peerId) {
 }
 
 async function startSync(peerId) {
-    let summary = { dm: {}, group: {} };
+    let summary = { dm: {}, group: {}, channel: {}, public: [] };
     let keys = await dbOp('readonly', s => s.getAllKeys());
     for(let k of keys) {
         if(k.startsWith('mw_dm_')) {
@@ -3533,6 +3557,13 @@ async function startSync(peerId) {
             let gid = k.split('mw_group_')[1];
             let h = await get('group', gid);
             summary.group[gid] = h.slice(-20).map(x => x.timestamp);
+        } else if(k.startsWith('mw_channel_')) {
+            let gid = k.split('mw_channel_')[1];
+            let h = await get('channel', gid);
+            summary.channel[gid] = h.slice(-20).map(x => x.timestamp);
+        } else if(k === 'mw_public_global') {
+            let h = await get('public', 'global');
+            summary.public = h.slice(-20).map(x => x.timestamp);
         }
     }
     let dc = S.wsync.dc[peerId];
@@ -3541,7 +3572,7 @@ async function startSync(peerId) {
 
 async function handleSyncData(peerId, data) {
     if(data.t === 'summary') {
-        let missing = { dm: {}, group: {} }, reqCount = 0;
+        let missing = { dm: {}, group: {}, channel: {}, public: [] }, reqCount = 0;
         for(let u in data.d.dm) {
             let h = await get('dm', u), myTs = h.map(x => x.timestamp);
             let diff = data.d.dm[u].filter(ts => !myTs.includes(ts));
@@ -3552,11 +3583,25 @@ async function handleSyncData(peerId, data) {
             let diff = data.d.group[gid].filter(ts => !myTs.includes(ts));
             if(diff.length) { missing.group[gid] = diff; reqCount += diff.length; }
         }
+        if(data.d.channel) {
+            for(let gid in data.d.channel) {
+                let h = await get('channel', gid), myTs = h.map(x => x.timestamp);
+                let diff = data.d.channel[gid].filter(ts => !myTs.includes(ts));
+                if(diff.length) { missing.channel[gid] = diff; reqCount += diff.length; }
+            }
+        }
+        if(data.d.public) {
+            let h = await get('public', 'global'), myTs = h.map(x => x.timestamp);
+            let diff = data.d.public.filter(ts => !myTs.includes(ts));
+            if(diff.length) { missing.public = diff; reqCount += diff.length; }
+        }
         if(reqCount > 0) S.wsync.dc[peerId].send(JSON.stringify({ t: 'req', d: missing }));
     } else if(data.t === 'req') {
         let payload = [];
         for(let u in data.d.dm) { let h = await get('dm', u); h.filter(x => data.d.dm[u].includes(x.timestamp)).forEach(m => payload.push({ cat: 'dm', id: u, m: m })); }
         for(let gid in data.d.group) { let h = await get('group', gid); h.filter(x => data.d.group[gid].includes(x.timestamp)).forEach(m => payload.push({ cat: 'group', id: gid, m: m })); }
+        if(data.d.channel) { for(let gid in data.d.channel) { let h = await get('channel', gid); h.filter(x => data.d.channel[gid].includes(x.timestamp)).forEach(m => payload.push({ cat: 'channel', id: gid, m: m })); } }
+        if(data.d.public) { let h = await get('public', 'global'); h.filter(x => data.d.public.includes(x.timestamp)).forEach(m => payload.push({ cat: 'public', id: 'global', m: m })); }
         S.wsync.dc[peerId].send(JSON.stringify({ t: 'push', d: payload }));
     } else if(data.t === 'push') {
         for(let item of data.d) await store(item.cat, item.id, item.m);
