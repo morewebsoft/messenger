@@ -2760,6 +2760,7 @@ async function send(){
         cancelFile();
     }
     if(!txt)return;
+    addToRecentEmojis(txt);
     
     // Optimistic UI
     inputEl.value=''; 
@@ -3830,6 +3831,31 @@ function switchEmojiTab(tab) {
     
     if(tab === 'emoji') {
         c.classList.add('emoji-grid');
+        
+        let recent = JSON.parse(localStorage.getItem('mw_recent_emojis') || '[]');
+        if(recent.length) {
+            let lbl = document.createElement('div');
+            lbl.innerText = 'Recent';
+            lbl.style.gridColumn = '1 / -1';
+            lbl.style.fontSize = '0.75rem';
+            lbl.style.color = '#888';
+            lbl.style.padding = '4px 0';
+            frag.appendChild(lbl);
+            recent.forEach(e => {
+                let el = document.createElement('div');
+                el.className = 'emoji-item';
+                el.innerText = e;
+                el.onclick = () => insertEmoji(e);
+                frag.appendChild(el);
+            });
+            let sep = document.createElement('div');
+            sep.style.gridColumn = '1 / -1';
+            sep.style.height = '1px';
+            sep.style.background = 'var(--border)';
+            sep.style.margin = '8px 0';
+            frag.appendChild(sep);
+        }
+
         EMOJI_ARR.forEach(e => {
             if(!e) return;
             let el = document.createElement('div');
@@ -3879,10 +3905,27 @@ function switchEmojiTab(tab) {
 }
 
 function insertEmoji(char) {
+    addToRecentEmojis(char);
     let txt = document.getElementById('txt');
     txt.value += char;
     txt.focus();
     toggleMainBtn();
+}
+
+function addToRecentEmojis(str) {
+    if(!str) return;
+    try {
+        let recent = JSON.parse(localStorage.getItem('mw_recent_emojis') || '[]');
+        let matches = str.match(/\p{Emoji_Presentation}/gu);
+        if(matches) {
+            matches.forEach(e => {
+                recent = recent.filter(x => x !== e);
+                recent.unshift(e);
+            });
+            recent = recent.slice(0, 24);
+            localStorage.setItem('mw_recent_emojis', JSON.stringify(recent));
+        }
+    } catch(e) {}
 }
 
 function createSticker() {
