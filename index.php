@@ -1671,6 +1671,28 @@ let lastPollTime = null;
 let emojiPinned = false;
 const RTC_CFG = LIGHTWEIGHT_MODE ? {iceServers:[]} : {iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
 let pc=null, localStream=null, callState='idle', callPeer=null;
+
+const vidObserver = window.IntersectionObserver ? new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        let v = entry.target;
+        if(entry.isIntersecting) {
+            if(v.paused && !v.dataset.paused) v.play().catch(()=>{});
+        } else {
+            if(!v.paused) v.pause();
+        }
+    });
+}, { threshold: 0.01 }) : null;
+
+async function setSafeVideoSrc(videoEl, dataUri) {
+    try {
+        let blob = await (await fetch(dataUri)).blob();
+        videoEl.src = URL.createObjectURL(blob);
+    } catch(e) {
+        videoEl.src = dataUri;
+    }
+    if(vidObserver) vidObserver.observe(videoEl);
+}
+
 let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], profiles:{}, notifs:[], keys:{pub:null,priv:null}, e2ee:{}, we:{active:false, ready:[]}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9), stickers:[], gifs:[] };
 localStorage.setItem('mw_did', S.deviceId);
 
@@ -2657,7 +2679,7 @@ function createMsgNode(m, showSender, history){
         </div>${!isVoice ? `<div style="font-size:0.75rem;opacity:0.8;margin-top:4px;margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">🎵 ${esc(m.extra_data)}</div>` : ''}`;
     }
     else if(m.type=='sticker') txt=`<img src="${m.message}" loading="lazy" style="width:128px;height:128px;object-fit:contain">`;
-    else if(m.type=='gif') txt=`<video src="${m.message}" autoplay loop muted playsinline style="max-width:100%;border-radius:8px;cursor:pointer" onclick="if(this.paused)this.play();else this.pause()"></video>`;
+    else if(m.type=='gif') txt=`<video class="gif-video" autoplay loop muted playsinline style="max-width:100%;border-radius:8px;cursor:pointer"></video>`;
     else if(m.type=='file') {
         let fname = esc(m.extra_data || 'file');
         let safeName = (m.extra_data || 'file').replace(/'/g, "\\'");
@@ -2744,16 +2766,27 @@ function createMsgNode(m, showSender, history){
     if(m.type=='video') {
         let ph = div.querySelector(`#vid-poster-${m.timestamp}`);
         if(ph) {
-            ph.onclick = (e) => {
+            ph.onclick = async (e) => {
                 e.stopPropagation();
+                ph.innerHTML = '<div class="rail-dot" style="background:#fff"></div>';
                 let v = document.createElement('video');
-                v.src = m.message; // Load video only when play button is clicked
                 v.controls = true;
                 v.style.maxWidth = '100%';
                 v.style.borderRadius = '8px';
                 v.autoplay = true;
+                await setSafeVideoSrc(v, m.message);
                 ph.replaceWith(v);
             };
+        }
+    }
+    if(m.type=='gif') {
+        let v = div.querySelector('.gif-video');
+        if(v) {
+            v.onclick = function() {
+                if(this.paused) { this.play(); delete this.dataset.paused; }
+                else { this.pause(); this.dataset.paused = "true"; }
+            };
+            setSafeVideoSrc(v, m.message);
         }
     }
     return div;
@@ -2763,6 +2796,11 @@ async function renderChat(){
     let h = await get(S.type,S.id);
     let c = document.getElementById('msgs');
     if(!c) return;
+    
+    c.querySelectorAll('video').forEach(v => {
+        if(v.src && v.src.startsWith('blob:')) URL.revokeObjectURL(v.src);
+    });
+    
     c.innerHTML='';
     let last=null, lastDate=null;
     h.forEach(m=>{
@@ -3875,6 +3913,11 @@ function switchEmojiTab(tab) {
     document.querySelectorAll('.emoji-tab').forEach(e => e.classList.remove('active'));
     document.getElementById('tab-em-'+tab).classList.add('active');
     let c = document.getElementById('emoji-content');
+    
+    c.querySelectorAll('video').forEach(v => {
+        if(v.src && v.src.startsWith('blob:')) URL.revokeObjectURL(v.src);
+    });
+    
     c.innerHTML = '';
     c.className = 'emoji-content';
     
@@ -3943,12 +3986,12 @@ function switchEmojiTab(tab) {
         S.gifs.forEach(url => {
             let el = document.createElement('video');
             el.className = 'gif-item';
-            el.src = url;
             el.autoplay = true;
             el.loop = true;
             el.muted = true;
             el.playsInline = true;
             el.onclick = () => { sendSticker(url, 'gif'); };
+            setSafeVideoSrc(el, url);
             frag.appendChild(el);
         });
     }
