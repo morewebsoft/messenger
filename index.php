@@ -2752,7 +2752,7 @@ function createMsgNode(m, showSender, history){
     if(m.reacts) reacts=`<div class="reaction-bar">${Object.values(m.reacts).join('')}</div>`;
     let stat='';
     if(m.from_user==ME && S.type=='dm') stat = m.read ? '<span style="color:#4fc3f7;margin-left:3px">✓✓</span>' : '<span style="margin-left:3px">✓</span>';
-    if(m.pending) stat = '<span style="color:#888;margin-left:3px">🕒</span>';
+    if(m.pending) stat = '<span class="msg-pending-stat" style="color:#888;margin-left:3px">' + (m.progress !== undefined ? m.progress+'%' : '🕒') + '</span>';
 
     let reactDisplay = '';
     if (m.reacts) {
@@ -3292,16 +3292,19 @@ async function sendFile(fileToSend) {
     cancelReply();
     
     // Optimistic Render
-    let r = new FileReader();
-    r.onload = async () => {
-        let type = 'file';
-        if (fileToSend.type.startsWith('image/')) type = 'image';
-        else if (fileToSend.type.startsWith('video/')) type = 'video';
-        else if (fileToSend.type.startsWith('audio/')) type = 'audio';
-        await store(S.type,S.id,{from_user:ME,message:r.result,type:type,timestamp:ts,extra_data:fileToSend.name, reply_to_id:replyId, pending:true});
-        scrollToBottom(true);
-    };
-    r.readAsDataURL(fileToSend);
+    await new Promise((resolve) => {
+        let r = new FileReader();
+        r.onload = async () => {
+            let type = 'file';
+            if (fileToSend.type.startsWith('image/')) type = 'image';
+            else if (fileToSend.type.startsWith('video/')) type = 'video';
+            else if (fileToSend.type.startsWith('audio/')) type = 'audio';
+            await store(S.type,S.id,{from_user:ME,message:r.result,type:type,timestamp:ts,extra_data:fileToSend.name, reply_to_id:replyId, pending:true, progress: 0});
+            scrollToBottom(true);
+            resolve();
+        };
+        r.readAsDataURL(fileToSend);
+    });
 
     let fd = new FormData();
     fd.append('file', fileToSend);
@@ -3312,8 +3315,30 @@ async function sendFile(fileToSend) {
     else fd.append('group_id', -1);
 
     try {
-        let res = await fetch('?action=upload_msg', { method:'POST', body:fd, headers:{'X-CSRF-Token': CSRF_TOKEN} });
-        let d = await res.json();
+        let d = await new Promise((resolve, reject) => {
+            let xhr = new XMLHttpRequest();
+            xhr.open('POST', '?action=upload_msg');
+            xhr.setRequestHeader('X-CSRF-Token', CSRF_TOKEN);
+            
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    let pct = Math.round((e.loaded / e.total) * 100);
+                    let msgNode = document.getElementById('msg-' + ts);
+                    if(msgNode) {
+                        let statNode = msgNode.querySelector('.msg-pending-stat');
+                        if(statNode) statNode.innerText = pct + '%';
+                    }
+                }
+            };
+            
+            xhr.onload = () => {
+                if(xhr.status === 200) {
+                    try { resolve(JSON.parse(xhr.responseText)); } catch(err) { reject(err); }
+                } else reject(new Error('HTTP ' + xhr.status));
+            };
+            xhr.onerror = () => reject(new Error('Network Error'));
+            xhr.send(fd);
+        });
         endProg();
         if(d.status!='success') {
             alertModal('Error', d.message||'Upload failed');
