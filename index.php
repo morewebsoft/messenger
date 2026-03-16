@@ -1021,7 +1021,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .avatar { width:40px; height:40px; border-radius:50%; background:#444; margin-right:12px; display:flex; align-items:center; justify-content:center; font-weight:bold; background-size:cover; flex-shrink:0; }
     
     .main-view { flex:1; display:flex; flex-direction:column; background:var(--bg); background-image:radial-gradient(var(--pattern) 1px, transparent 1px); background-size:20px 20px; position:relative; min-height:0; min-width:0; }
-    .chat-header { height:60px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; flex-shrink: 0; }
+    .chat-header { height:60px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 20px; flex-shrink: 0; z-index: 100; position: relative; }
     .header-actions { display:flex; gap:15px; position:relative; }
     .chat-info-clickable { cursor: pointer; }
     
