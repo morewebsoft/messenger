@@ -1868,21 +1868,17 @@ async function loadKeys() {
     // Note: In a real app, we'd upload pubkey here, but we do it above if exists or after gen
 }
 
-async function saveSession(u, k) {
-    S.e2ee[u] = k;
-
-    localStorage.setItem('mw_sess_' + u, JSON.stringify(await window.crypto.subtle.exportKey("jwk", k)));
-}
-
 async function loadSessions() {
     if(!window.crypto || !window.crypto.subtle) return;
     for (let i = 0; i < localStorage.length; i++) {
         let k = localStorage.key(i);
-        if (k.startsWith('mw_sess_')) {
-            let u = k.split('mw_sess_')[1];
-            S.e2ee[u] = await window.crypto.subtle.importKey("jwk", JSON.parse(localStorage.getItem(k)), {name:"AES-GCM",length:256}, false, ["encrypt","decrypt"]);
+        if (k.startsWith('mw_grp_sess_')) {
+            let gid = k.split('mw_grp_sess_')[1];
+            S.e2ee[gid] = await window.crypto.subtle.importKey("jwk", JSON.parse(localStorage.getItem(k)), {name:"AES-GCM",length:256}, false, ["encrypt","decrypt"]);
+        } else if (k.startsWith('mw_pub_')) {
+            let u = k.split('mw_pub_')[1];
+            S.e2ee[u] = await window.crypto.subtle.importKey("jwk", JSON.parse(localStorage.getItem(k)), {name:"ECDH",namedCurve:"P-256"}, true, []);
         }
-
     }
 }
 
@@ -2001,6 +1997,13 @@ async function init(){
     try {
         await loadKeys();
         await loadSessions();
+        
+        // Migration to clean up old AES-GCM DM keys
+        let keys = Object.keys(localStorage);
+        for(let k of keys){
+            if(k.startsWith('mw_sess_')) localStorage.removeItem(k);
+        }
+        
         // Migration from LocalStorage to IndexedDB
         if(!localStorage.getItem('mw_migrated_v1')){
             try {
@@ -2162,18 +2165,16 @@ async function poll(){
             if(m.type=='enc'){ 
                 try{
                     if(!S.e2ee[m.from_user]) await ensureE2EE(m.from_user);
-                    m.message=await dec(m.from_user,m.message,m.extra_data);
+                    m.message=await dec('dm', m.from_user, m.message, m.extra_data);
                     m.type='text';
                 }catch(e){
-                    m.message="⚠️ [Encrypted - Key Mismatch] Decryption failed. Tap the Lock icon at the top to reset the session.";
+                    m.message="⚠️ [Encrypted] Decryption failed. If you recently changed devices, tell the sender to tap the Lock icon to refresh keys.";
                     m.type='text';
                 } 
             }
-            let isNew = await store('dm',m.from_user,m);
-            if(isNew) {
-                let prev = m.type==='text' ? m.message : '['+m.type+']';
-                notify(m.from_user, prev, 'dm');
-            }
+            await store('dm',m.from_user,m);
+            let prev = m.type==='text' ? m.message : '['+m.type+']';
+            notify(m.from_user, prev, 'dm');
             if(S.type=='dm' && S.id==m.from_user && document.hasFocus()) req('send', {to_user:m.from_user, type:'read', extra:m.timestamp});
         }
         S.groups={}; 
@@ -2188,16 +2189,28 @@ async function poll(){
             let g = S.groups[m.group_id];
             let type = (g && g.category === 'channel') ? 'channel' : 'group';
             if(m.type=='delete'){ await removeMsg(type,m.group_id,m.extra_data); continue; }
-            let isNew = await store(type,m.group_id,m); 
-            if(isNew) {
-                let prev = m.type==='text' ? m.message : '['+m.type+']';
-                notify(m.group_id, prev, type); 
+            if(m.type=='enc') {
+                try {
+                    if(S.e2ee[m.group_id]) {
+                        m.message=await dec('group', m.group_id, m.message, m.extra_data);
+                        m.type='text';
+                    } else {
+                        m.message="⚠️ [Encrypted] Missing group key. You may need to be re-invited to WEncrypt.";
+                        m.type='text';
+                    }
+                } catch(e) {
+                    m.message="⚠️ [Encrypted] Decryption failed.";
+                    m.type='text';
+                }
             }
+            await store(type,m.group_id,m); 
+            let prev = m.type==='text' ? m.message : '['+m.type+']';
+            notify(m.group_id, prev, type); 
         }
         for(let m of d.public_msgs){
             if(m.type=='delete'){ await removeMsg('public','global',m.extra_data); continue; }
-            let isNew = await store('public','global',m);
-            if(isNew) notify('global', m.message, 'public');
+            await store('public','global',m);
+            notify('global', m.message, 'public');
         }
         if(S.type=='public') document.getElementById('chat-sub').innerText = "Global Room (5m TTL) - " + d.online.length + " Online";
         else if(S.type=='dm' && d.typing && d.typing.includes(S.id)) document.getElementById('typing-ind').style.display='block'; else document.getElementById('typing-ind').style.display='none';
@@ -2242,12 +2255,6 @@ function notify(id, text, type) {
         if(navigator.serviceWorker&&navigator.serviceWorker.controller) navigator.serviceWorker.ready.then(r=>r.showNotification(title,opts));
         else new Notification(title,opts);
     }
-}
-
-function clearNotifsForChat(type, id) {
-    let len = S.notifs.length;
-    S.notifs = S.notifs.filter(n => !(n.type === type && n.id == id));
-    if(S.notifs.length !== len) updateNotifUI();
 }
 
 function updateNotifUI() {
@@ -2304,9 +2311,9 @@ async function store(t,i,m){
                 if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
             }
         }
-        return false;
+        return;
     }
-    if(m.type.startsWith('wencrypt_')) return false; // Don't store signals
+    if(m.type.startsWith('wencrypt_')) return; // Don't store signals
     if(m.type=='react'){
         let tg=h.find(x=>x.timestamp==m.extra_data);
         if(tg){ 
@@ -2319,7 +2326,7 @@ async function store(t,i,m){
                 if (el) el.replaceWith(createMsgNode(tg, el.querySelector('.msg-sender') !== null, h));
             }
         }
-      return false;
+      return;
     }
     h.push(m); 
     h.sort((a,b)=>a.timestamp-b.timestamp);
@@ -2333,7 +2340,6 @@ async function store(t,i,m){
             scrollToBottom(false);
         } else renderChat();
     }
-    return true;
 }
 async function removeMsg(t,i,ts){
     let h = await get(t,i);
@@ -2349,9 +2355,16 @@ async function removeMsg(t,i,ts){
 }
 
 async function resetE2EE(u) {
+    if(!confirm("Fetch the latest encryption keys for this user? Use this if they changed devices.")) return;
     delete S.e2ee[u];
-    localStorage.removeItem('mw_sess_' + u);
-    await startE2EE();
+    localStorage.removeItem('mw_pub_' + u);
+    let success = await ensureE2EE(u);
+    if(success) {
+        alertModal("Security", "E2EE session updated with latest keys.");
+        if (S.id === u) updateE2EEUI();
+    } else {
+        alertModal("Error", "Could not fetch new keys.");
+    }
 }
 
 function updateE2EEUI() {
@@ -2382,7 +2395,7 @@ function updateE2EEUI() {
 
 function toggleEncryption(){
     if(S.type=='dm') {
-        if(S.e2ee[S.id]) confirmModal("E2EE Active", "Encryption is active. Do you want to securely reset the session keys? (Use this if decryption is failing)", res => { if(res) resetE2EE(S.id); });
+        if(S.e2ee[S.id]) resetE2EE(S.id);
         else startE2EE();
     }
     else if(S.type=='group') {
@@ -2410,23 +2423,68 @@ async function ensureE2EE(u){
         let d = await r.json();
         if(d.public_key) {
             let fk = await window.crypto.subtle.importKey("jwk", JSON.parse(d.public_key), {name:"ECDH",namedCurve:"P-256"}, true, []);
-            let derived = await window.crypto.subtle.deriveKey({name:"ECDH",public:fk}, S.keys.priv, {name:"AES-GCM",length:256}, false, ["encrypt","decrypt"]);
-            await saveSession(u, derived);
+            S.e2ee[u] = fk;
+            localStorage.setItem('mw_pub_' + u, d.public_key);
             return true;
         }
-    } catch(e) { console.error("E2EE Setup failed", e); }
+    } catch(e) { 
+        let cached = localStorage.getItem('mw_pub_' + u);
+        if(cached) {
+            let fk = await window.crypto.subtle.importKey("jwk", JSON.parse(cached), {name:"ECDH",namedCurve:"P-256"}, true, []);
+            S.e2ee[u] = fk;
+            return true;
+        }
+        console.error("E2EE Setup failed", e); 
+    }
     return false;
 }
-async function enc(u,txt){
-    let iv=window.crypto.getRandomValues(new Uint8Array(12));
-    let buf=await window.crypto.subtle.encrypt({name:"AES-GCM",iv:iv},S.e2ee[u],new TextEncoder().encode(txt));
-    let b=''; new Uint8Array(buf).forEach(x=>b+=String.fromCharCode(x));
-    let i=''; iv.forEach(x=>i+=String.fromCharCode(x));
-    return {c:btoa(b),i:btoa(i)};
+async function enc(t, id, txt){
+    if (t === 'dm') {
+        let ephem = await window.crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"}, true, ["deriveKey"]);
+        let derived = await window.crypto.subtle.deriveKey({name:"ECDH",public:S.e2ee[id]}, ephem.privateKey, {name:"AES-GCM",length:256}, false, ["encrypt"]);
+        let iv=window.crypto.getRandomValues(new Uint8Array(12));
+        let buf=await window.crypto.subtle.encrypt({name:"AES-GCM",iv:iv}, derived, new TextEncoder().encode(txt));
+        
+        let b=''; new Uint8Array(buf).forEach(x=>b+=String.fromCharCode(x));
+        let i=''; iv.forEach(x=>i+=String.fromCharCode(x));
+        let p = await window.crypto.subtle.exportKey("jwk", ephem.publicKey);
+        
+        return {c:btoa(b), extra: JSON.stringify({ i: btoa(i), p: p })};
+    } else if (t === 'group') {
+        let gk = S.e2ee[id];
+        let iv=window.crypto.getRandomValues(new Uint8Array(12));
+        let buf=await window.crypto.subtle.encrypt({name:"AES-GCM",iv:iv}, gk, new TextEncoder().encode(txt));
+        
+        let b=''; new Uint8Array(buf).forEach(x=>b+=String.fromCharCode(x));
+        let i=''; iv.forEach(x=>i+=String.fromCharCode(x));
+        return {c:btoa(b), extra: btoa(i)};
+    }
 }
-async function dec(u,c,i){
-    let d=await window.crypto.subtle.decrypt({name:"AES-GCM",iv:Uint8Array.from(atob(i),c=>c.charCodeAt(0))},S.e2ee[u],Uint8Array.from(atob(c),c=>c.charCodeAt(0)));
-    return new TextDecoder().decode(d);
+async function dec(t, id, c, extra_data){
+    if (t === 'dm') {
+        let isLegacy = false;
+        let i_b64, p_jwk;
+        try {
+            let ext = JSON.parse(extra_data);
+            if(ext.i && ext.p) { i_b64 = ext.i; p_jwk = ext.p; } else isLegacy = true;
+        } catch(e) { isLegacy = true; }
+
+        if (isLegacy) {
+            let fk = S.e2ee[id];
+            let legacyKey = await window.crypto.subtle.deriveKey({name:"ECDH",public:fk}, S.keys.priv, {name:"AES-GCM",length:256}, false, ["decrypt"]);
+            let d=await window.crypto.subtle.decrypt({name:"AES-GCM",iv:Uint8Array.from(atob(extra_data),ch=>ch.charCodeAt(0))}, legacyKey, Uint8Array.from(atob(c),ch=>ch.charCodeAt(0)));
+            return new TextDecoder().decode(d);
+        } else {
+            let ephemPub = await window.crypto.subtle.importKey("jwk", p_jwk, {name:"ECDH",namedCurve:"P-256"}, false, []);
+            let derived = await window.crypto.subtle.deriveKey({name:"ECDH",public:ephemPub}, S.keys.priv, {name:"AES-GCM",length:256}, false, ["decrypt"]);
+            let d=await window.crypto.subtle.decrypt({name:"AES-GCM",iv:Uint8Array.from(atob(i_b64),ch=>ch.charCodeAt(0))}, derived, Uint8Array.from(atob(c),ch=>ch.charCodeAt(0)));
+            return new TextDecoder().decode(d);
+        }
+    } else if (t === 'group') {
+        let gk = S.e2ee[id];
+        let d=await window.crypto.subtle.decrypt({name:"AES-GCM",iv:Uint8Array.from(atob(extra_data),ch=>ch.charCodeAt(0))}, gk, Uint8Array.from(atob(c),ch=>ch.charCodeAt(0)));
+        return new TextDecoder().decode(d);
+    }
 }
 
 // --- WENCRYPT (GROUP E2EE) ---
@@ -2458,9 +2516,10 @@ function handleWeReady(m){
                 if(mem.username == ME) { payload[ME] = JSON.stringify(gkExp); continue; }
                 if(!mem.public_key) continue; // Skip users without keys
                 
-                // Derive session key for this user
+                // Derive session key for this user using Ephemeral ECDH
                 let theirPub = await window.crypto.subtle.importKey("jwk", JSON.parse(mem.public_key), {name:"ECDH",namedCurve:"P-256"}, true, []);
-                let sessKey = await window.crypto.subtle.deriveKey({name:"ECDH",public:theirPub}, S.keys.priv, {name:"AES-GCM",length:256}, false, ["encrypt"]);
+                let ephem = await window.crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"}, true, ["deriveKey"]);
+                let sessKey = await window.crypto.subtle.deriveKey({name:"ECDH",public:theirPub}, ephem.privateKey, {name:"AES-GCM",length:256}, false, ["encrypt"]);
                 
                 // Encrypt the Group Key with Session Key
                 let iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -2468,7 +2527,9 @@ function handleWeReady(m){
                 
                 let b=''; new Uint8Array(buf).forEach(x=>b+=String.fromCharCode(x));
                 let i=''; iv.forEach(x=>i+=String.fromCharCode(x));
-                payload[mem.username] = btoa(b)+':'+btoa(i);
+                let p = await window.crypto.subtle.exportKey("jwk", ephem.publicKey);
+                
+                payload[mem.username] = JSON.stringify({ c: btoa(b), i: btoa(i), p: p });
             }
             req('send', {group_id:S.id, type:'wencrypt_key', message:JSON.stringify(payload)});
         }
@@ -2482,28 +2543,19 @@ async function handleWeKey(m){
         // If owner sent it to themselves (unencrypted) or encrypted
         let kStr = payload[ME];
         if(m.from_user != ME){
-            // Decrypt
-            let parts = kStr.split(':');
-            let ownerPub = await getOwnerPub(m.group_id, m.from_user); // Need to fetch owner pub key
-            if(!ownerPub) return;
-            let sessKey = await window.crypto.subtle.deriveKey({name:"ECDH",public:ownerPub}, S.keys.priv, {name:"AES-GCM",length:256}, false, ["decrypt"]);
-            let d = await window.crypto.subtle.decrypt({name:"AES-GCM",iv:Uint8Array.from(atob(parts[1]),c=>c.charCodeAt(0))}, sessKey, Uint8Array.from(atob(parts[0]),c=>c.charCodeAt(0)));
+            let encData = JSON.parse(kStr);
+            let ephemPub = await window.crypto.subtle.importKey("jwk", encData.p, {name:"ECDH",namedCurve:"P-256"}, false, []);
+            let sessKey = await window.crypto.subtle.deriveKey({name:"ECDH",public:ephemPub}, S.keys.priv, {name:"AES-GCM",length:256}, false, ["decrypt"]);
+            let d = await window.crypto.subtle.decrypt({name:"AES-GCM",iv:Uint8Array.from(atob(encData.i),c=>c.charCodeAt(0))}, sessKey, Uint8Array.from(atob(encData.c),c=>c.charCodeAt(0)));
             kStr = new TextDecoder().decode(d);
         }
         let gk = await window.crypto.subtle.importKey("jwk", JSON.parse(kStr), {name:"AES-GCM",length:256}, false, ["encrypt","decrypt"]);
         S.e2ee[S.id] = gk;
+        localStorage.setItem('mw_grp_sess_' + S.id, JSON.stringify(await window.crypto.subtle.exportKey("jwk", gk)));
         S.we.active = false;
         document.getElementById('we-overlay').style.display='none';
         alertModal("WEncrypt", "Group is now encrypted.");
     }
-}
-
-async function getOwnerPub(gid, ownerName){
-    let r = await fetch('?action=get_group_details&id='+gid);
-    let d = await r.json();
-    let u = d.members.find(x=>x.username==ownerName);
-    if(u && u.public_key) return await window.crypto.subtle.importKey("jwk", JSON.parse(u.public_key), {name:"ECDH",namedCurve:"P-256"}, true, []);
-    return null;
 }
 
 function switchTab(t){
@@ -2824,7 +2876,6 @@ async function openChat(t,i){
     document.getElementById('we-overlay').style.display='none';
     if(S.id!=i) lastRead=0;
     S.type=t; S.id=i;
-    clearNotifsForChat(t, i);
     renderLists();
     await renderChat(); 
     if(S.scroll[t+'_'+i]!==undefined) {
@@ -3103,10 +3154,10 @@ async function send(){
     let load = { message: txt, type: 'text', reply_to: replyId, timestamp: ts };
     if(S.type=='dm') load.to_user=S.id; else if(S.type=='group'||S.type=='channel') load.group_id=S.id; else if(S.type=='public') load.group_id=-1;
 
-    if(S.type=='dm' && S.e2ee[S.id]){
+    if(S.e2ee[S.id] && (S.type == 'dm' || S.type == 'group')){
         try {
-            let e=await enc(S.id,txt);
-            load.message=e.c; load.extra=e.i; load.type='enc';
+            let e=await enc(S.type, S.id, txt);
+            load.message=e.c; load.extra=e.extra; load.type='enc';
         } catch(e){ console.error("Encryption failed, sending plain", e); }
     }
 
@@ -3911,7 +3962,6 @@ window.onfocus=async ()=>{
             req('send',{to_user:S.id,type:'read',extra:last.timestamp}); 
         }
     }
-    if(S.type && S.id) clearNotifsForChat(S.type, S.id);
 };
 
 // --- WEBRTC CALLING ---
