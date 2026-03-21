@@ -1561,6 +1561,10 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
             </div>
             
             <div class="header-actions">
+                <div class="btn-icon" id="btn-e2ee" onclick="toggleEncryption()" style="display:none" title="End-to-End Encryption">
+                    <svg id="icon-e2ee-off" viewBox="0 0 24 24" width="24" fill="currentColor"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H8.9V6zM18 20H6V10h12v10z"/></svg>
+                    <svg id="icon-e2ee-on" viewBox="0 0 24 24" width="24" fill="var(--accent)" style="display:none"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/></svg>
+                </div>
                 <div class="btn-icon" id="btn-call" onclick="startCall()" style="display:none">
                     <svg viewBox="0 0 24 24" width="24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
                 </div>
@@ -2159,7 +2163,11 @@ async function poll(){
                 try{
                     if(!S.e2ee[m.from_user]) await ensureE2EE(m.from_user);
                     m.message=await dec(m.from_user,m.message,m.extra_data);
-                }catch(e){m.message="[Encrypted]"} 
+                    m.type='text';
+                }catch(e){
+                    m.message="⚠️ [Encrypted - Key Mismatch] Decryption failed. Tap the Lock icon at the top to reset the session.";
+                    m.type='text';
+                } 
             }
             await store('dm',m.from_user,m);
             let prev = m.type==='text' ? m.message : '['+m.type+']';
@@ -2329,22 +2337,60 @@ async function removeMsg(t,i,ts){
     }
 }
 
+async function resetE2EE(u) {
+    delete S.e2ee[u];
+    localStorage.removeItem('mw_sess_' + u);
+    await startE2EE();
+}
+
+function updateE2EEUI() {
+    let btn = document.getElementById('btn-e2ee');
+    if(!btn) return;
+    
+    let canEncrypt = (S.type === 'dm' || (S.type === 'group' && S.groups[S.id] && S.groups[S.id].category !== 'channel'));
+    btn.style.display = canEncrypt ? 'flex' : 'none';
+    
+    if(canEncrypt) {
+        let isEnc = !!S.e2ee[S.id];
+        document.getElementById('icon-e2ee-on').style.display = isEnc ? 'block' : 'none';
+        document.getElementById('icon-e2ee-off').style.display = isEnc ? 'none' : 'block';
+        
+        let title = document.getElementById('chat-title');
+        let lockSvg = '<svg viewBox="0 0 24 24" width="16" style="vertical-align:text-bottom;fill:var(--accent);margin-left:5px"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/></svg>';
+        if(isEnc && !title.innerHTML.includes('<svg')) title.innerHTML += lockSvg;
+        else if (!isEnc && title.innerHTML.includes('<svg')) title.innerHTML = title.innerHTML.split('<svg')[0];
+        
+        let txt = document.getElementById('txt');
+        if(txt) {
+            const langT = TR[curLang] || TR['en'];
+            let canPost = !(S.type=='channel' && S.groups[S.id] && S.groups[S.id].owner_id != <?php echo $_SESSION['uid']; ?>);
+            txt.placeholder = isEnc ? langT.type_enc : (canPost ? langT.type_msg : langT.only_owner);
+        }
+    }
+}
+
 function toggleEncryption(){
-    if(S.type=='dm') startE2EE();
-    else if(S.type=='group') startWEncrypt();
+    if(S.type=='dm') {
+        if(S.e2ee[S.id]) confirmModal("E2EE Active", "Encryption is active. Do you want to securely reset the session keys? (Use this if decryption is failing)", res => { if(res) resetE2EE(S.id); });
+        else startE2EE();
+    }
+    else if(S.type=='group') {
+        if(S.e2ee[S.id]) alertModal("WEncrypt", "Group encryption is already active.");
+        else startWEncrypt();
+    }
 }
 async function startE2EE(){
     if(!window.crypto || !window.crypto.subtle) { alertModal('Error', 'Encryption requires HTTPS'); return; }
     if(S.type!='dm'||S.e2ee[S.id])return;
     startProg();
-    if(await ensureE2EE(S.id)){
-        alertModal("Security", "Encryption enabled.");
-        showProfilePopup();
-        document.getElementById('txt').placeholder="Type an encrypted message...";
-    } else {
-        alertModal("Info", "Encryption unavailable. Using standard connection.");
-    }
+    let success = await ensureE2EE(S.id);
     endProg();
+    if(success){
+        alertModal("Security", "End-to-End Encryption enabled and verified.");
+        updateE2EEUI();
+    } else {
+        alertModal("Info", "Encryption unavailable. The user may not have logged in recently to generate their keys.");
+    }
 }
 async function ensureE2EE(u){
     if(S.e2ee[u]) return true;
@@ -2805,11 +2851,12 @@ async function openChat(t,i){
     }
     document.getElementById('chat-title').innerText=tit;
     document.getElementById('chat-sub').innerText=sub;
-    document.getElementById('txt').placeholder = (t=='dm' && S.e2ee[S.id]) ? langT.type_enc : (canPost ? langT.type_msg : langT.only_owner);
     document.getElementById('btn-call').style.display = (t=='dm') ? 'flex' : 'none';
     document.getElementById('input-box').style.visibility = canPost ? 'visible' : 'hidden';
     toggleMainBtn();
     if(window.innerWidth > 850) setTimeout(()=>document.getElementById('txt').focus(), 50);
+    
+    updateE2EEUI();
     
     if(t=='dm'){ let h=await get('dm',i); let last=h.filter(x=>x.from_user==i).pop(); if(last && last.timestamp>lastRead){ lastRead=last.timestamp; req('send',{to_user:i,type:'read',extra:last.timestamp}); } }
 }
@@ -3630,7 +3677,7 @@ async function showProfilePopup() {
                 Joined: ${new Date(p.joined_at*1000).toLocaleDateString()}<br>
                 Last Seen: ${new Date(p.last_seen*1000).toLocaleString()}
             </div>
-            ${!S.e2ee[S.id] ? `<button class="btn-sec" style="margin-top:15px;width:100%" onclick="startE2EE();document.getElementById('app-modal').style.display='none'">Enable End-to-End Encryption</button>` : `<div style="margin-top:15px;color:var(--accent)">🔒 Encrypted</div>`}
+            ${!S.e2ee[S.id] ? `<button class="btn-sec" style="margin-top:15px;width:100%" onclick="startE2EE();document.getElementById('app-modal').style.display='none'">Enable End-to-End Encryption</button>` : `<button class="btn-sec" style="margin-top:15px;width:100%;color:#ff9800;border-color:#ff9800" onclick="resetE2EE('${S.id}');document.getElementById('app-modal').style.display='none'">Reset E2EE Session</button>`}
         </div>`;
         alertModal("Profile", ""); document.getElementById('modal-body').innerHTML = html;
     } else if (S.type === 'group' || S.type === 'channel') {
