@@ -2305,6 +2305,7 @@ function notify(id, text, type) {
     if(S.notifs.some(n => n.id == id && n.text == text)) return;
     let title = type=='dm'?id:(type=='public'?'Public Chat':(S.groups[id]?S.groups[id].name:(type=='channel'?'Channel':'Group')));
     S.notifs.unshift({id, type, text, title: title, time:new Date()});
+    if(S.notifs.length > 50) S.notifs.length = 50;
     updateNotifUI();
     let targetTab = (type=='dm' || type=='public') ? 'chats' : (type=='channel'?'channels':'groups');
     if(S.tab !== targetTab && document.getElementById('badge-' + targetTab)) {
@@ -2986,6 +2987,8 @@ async function openChat(t,i){
     if(S.id!=i) lastRead=0;
     S.type=t; S.id=i;
     renderLists();
+    cancelReply();
+    cancelFile();
     await renderChat(); 
     if(S.scroll[t+'_'+i]!==undefined) {
         let c=document.getElementById('msgs'); c.scrollTop = S.scroll[t+'_'+i];
@@ -3361,7 +3364,6 @@ async function ctxAction(act, arg) {
             if(t){
                 t.pinned=!t.pinned; await save(S.type,S.id,h); 
                 let el = document.getElementById('msg-' + m.timestamp);
-                if (el) updateMsgNodeInPlace(el, t);
                 if (el) el.replaceWith(createMsgNode(t, el.querySelector('.msg-sender') !== null, h));
             } 
         }
@@ -3995,7 +3997,7 @@ function scrollToBottom(force){
     if(c.scrollHeight - c.scrollTop - c.clientHeight < 150) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
 }
 function esc(t){ return t?String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"):"" }
-function jsEsc(t){ return t?String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"'):"" }
+function jsEsc(t){ return t?String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r'):"" }
 
 document.getElementById('txt').onkeydown=e=>{if(e.key=='Enter' && !e.shiftKey){e.preventDefault();send()}};
 document.getElementById('txt').onkeydown=e=>{if(e.key=='Enter' && !e.shiftKey){e.preventDefault();handleMainBtn()}};
