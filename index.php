@@ -882,7 +882,7 @@ loadData();
 <div class="box">
     <div class="welcome-text">Welcome</div>
     <h2 id="ttl">moreweb Messenger</h2><div id="err" style="color:#f55;display:none;margin-bottom:10px"></div>
-    <input id="u" placeholder="Username"><input type="password" id="p" placeholder="Password">
+    <input id="u" placeholder="Username" autocomplete="username"><input type="password" id="p" placeholder="Password" autocomplete="current-password">
     <button onclick="sub()">Sign In</button>
     <div id="toggle-text" onclick="toggleMode()">Need an account? Create one</div>
 </div>
@@ -1424,7 +1424,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     <div class="modal-box">
         <h3 id="modal-title" class="modal-title"></h3>
         <div id="modal-body" class="modal-body"></div>
-        <input id="modal-input" type="text" class="form-input" style="display:none">
+        <input id="modal-input" type="text" class="form-input" style="display:none" autocomplete="off">
         <div class="modal-btns">
             <button id="modal-cancel" class="btn-modal btn-sec">Cancel</button>
             <button id="modal-ok" class="btn-modal btn-pri">OK</button>
@@ -1476,7 +1476,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
             <div class="conn-text">Connecting<span class="conn-dots"></span></div>
         </div>
         <div id="tab-chats" class="tab-content">
-            <div style="padding:10px 15px 5px 15px"><input type="text" id="chat-search" class="form-input" placeholder="Search chats..." onkeyup="renderLists()" style="margin:0;padding:10px 15px;border-radius:20px"></div>
+            <div style="padding:10px 15px 5px 15px"><input type="text" id="chat-search" class="form-input" placeholder="Search chats..." onkeyup="renderLists()" style="margin:0;padding:10px 15px;border-radius:20px" autocomplete="off"></div>
             <div class="panel-header" style="padding-top:5px;padding-bottom:5px;border-bottom:none"><span data-i18n="tab_chats">Chats</span> <div class="btn-icon" onclick="promptChat()">+</div></div>
             <div class="list-area" id="list-chats">
                 <div class="tab-loader">
@@ -1486,7 +1486,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
             </div>
         </div>
         <div id="tab-groups" class="tab-content" style="display:none">
-            <div style="padding:10px 15px 5px 15px"><input type="text" id="group-search" class="form-input" placeholder="Search groups..." onkeyup="renderLists()" style="margin:0;padding:10px 15px;border-radius:20px"></div>
+            <div style="padding:10px 15px 5px 15px"><input type="text" id="group-search" class="form-input" placeholder="Search groups..." onkeyup="renderLists()" style="margin:0;padding:10px 15px;border-radius:20px" autocomplete="off"></div>
             <div class="panel-header" style="padding-top:5px;padding-bottom:5px;border-bottom:none"><span data-i18n="tab_groups">Groups</span> 
                 <div style="display:flex;gap:5px">
                 <div class="btn-icon" onclick="discover('group')" title="Discover Groups">🌍</div>
@@ -1501,7 +1501,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
             </div>
         </div>
         <div id="tab-channels" class="tab-content" style="display:none">
-            <div style="padding:10px 15px 5px 15px"><input type="text" id="channel-search" class="form-input" placeholder="Search channels..." onkeyup="renderLists()" style="margin:0;padding:10px 15px;border-radius:20px"></div>
+            <div style="padding:10px 15px 5px 15px"><input type="text" id="channel-search" class="form-input" placeholder="Search channels..." onkeyup="renderLists()" style="margin:0;padding:10px 15px;border-radius:20px" autocomplete="off"></div>
             <div class="panel-header" style="padding-top:5px;padding-bottom:5px;border-bottom:none"><span data-i18n="tab_channels">Channels</span> <div style="display:flex;gap:5px"><div class="btn-icon" onclick="discover('channel')" title="Discover Channels">🌍</div><div class="btn-icon" onclick="createChannel()" title="Create Channel">+</div></div></div>
             <div style="padding:0 15px 10px 15px"><button class="form-input" style="cursor:pointer;border-radius:20px;text-align:center;background:var(--bg);border:1px solid var(--border)" onclick="joinGroup()">Join via Code</button></div>
             <div class="list-area" id="list-channels">
@@ -1526,13 +1526,13 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                 <div class="avatar" id="my-av" style="width:80px;height:80px;margin:0 auto;font-size:2rem"></div>
                 <h3 id="my-name"></h3>
                 <p id="my-date" style="color:#777;font-size:0.8rem"></p>
-                <div class="form-group"><label data-i18n="bio">Bio / Status</label><input class="form-input" id="set-bio" maxlength="50"></div>
+                <div class="form-group"><label data-i18n="bio">Bio / Status</label><input class="form-input" id="set-bio" maxlength="50" autocomplete="off"></div>
                 <div class="form-group"><label data-i18n="avatar_url">Avatar</label>
-                    <div style="display:flex;gap:5px"><input class="form-input" id="set-av" <?php if ($lightweightMode) echo 'placeholder="Local URL or Data URI only"'; ?> style="flex:1">
+                    <div style="display:flex;gap:5px"><input class="form-input" id="set-av" <?php if ($lightweightMode) echo 'placeholder="Local URL or Data URI only"'; ?> style="flex:1" autocomplete="off">
                     <button class="btn-sec" onclick="document.getElementById('up-av').click()">Upload</button></div>
                     <input type="file" id="up-av" hidden accept="image/*" onchange="handleAvUpload(this)">
                 </div>
-                <div class="form-group"><label data-i18n="new_pass">New Password</label><input class="form-input" id="set-pw" type="password"></div>
+                <div class="form-group"><label data-i18n="new_pass">New Password</label><input class="form-input" id="set-pw" type="password" autocomplete="new-password"></div>
                 <div class="form-group"><label data-i18n="lang_select">Language</label><select id="set-lang" class="form-select" onchange="setLang(this.value)"><option value="en">English</option><option value="fa">فارسی</option></select></div>
                 <div class="form-group"><button class="btn-sec" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:var(--panel);color:var(--text)" onclick="toggleTheme()" data-i18n="toggle_theme">Toggle Dark/Light Mode</button></div>
                 <div class="form-group"><button class="btn-sec" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:var(--panel);color:var(--text)" onclick="enableNotifs()" data-i18n="enable_notif">Enable Notifications</button></div>
@@ -1650,7 +1650,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                     <span onclick="stopRec(false)" style="cursor:pointer;margin-right:15px;color:#ccc;letter-spacing:0.2em;text-align:center">C A N C E L</span>
                     <button onclick="stopRec(true)" class="btn-icon" style="background:var(--accent);color:#fff;width:45px;height:45px;border-radius:50%"><svg viewBox="0 0 24 24"><path d="M21 7L9 19l-5.5-5.5L5 12.5 9 16.5 19 6l2 1z"/></svg></button>
                 </div>
-                <textarea id="txt" rows="1" placeholder="Type a message..." enterkeyhint="send"></textarea>
+                <textarea id="txt" rows="1" placeholder="Type a message..." enterkeyhint="send" autocomplete="off"></textarea>
             </div>
             <button class="btn-icon" id="btn-att" onclick="handleAttClick(event)">
                 <svg viewBox="0 0 24 24" width="24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
@@ -4063,7 +4063,7 @@ function createEntity(type){
     document.getElementById('modal-ok').style.display='none';
     document.getElementById('modal-cancel').style.display='block';
     document.getElementById('modal-body').innerHTML = `
-        <input id="ng-name" class="form-input" placeholder="${label} Name">
+        <input id="ng-name" class="form-input" placeholder="${label} Name" autocomplete="off">
         <select id="ng-type" class="form-select">
             <option value="public">Public (Code)</option>
             <option value="discoverable">Discoverable (Listed)</option>
@@ -4088,8 +4088,8 @@ function doCreateGroup(cat){
 function joinGroup(){ 
     alertModal("Join Group", "");
     document.getElementById('modal-body').innerHTML = `
-        <input id="jg-code" class="form-input" placeholder="Invite Code">
-        <input id="jg-pass" class="form-input" type="password" placeholder="Password (Optional)">
+        <input id="jg-code" class="form-input" placeholder="Invite Code" autocomplete="off">
+        <input id="jg-pass" class="form-input" type="password" placeholder="Password (Optional)" autocomplete="new-password">
         <button class="btn-primary" style="width:100%;margin-top:10px" onclick="doJoinGroup()">Join</button>
     `;
 }
@@ -4159,9 +4159,9 @@ function groupSettings(gid){
     alertModal("Group Settings", "");
     document.getElementById('modal-body').innerHTML = `
         <div class="form-group"><label>Enable Joining</label> <input type="checkbox" id="gs-join"></div>
-        <div class="form-group"><label>Code Suffix (Letter)</label><input id="gs-suff" class="form-input" maxlength="1" placeholder="A-Z"></div>
-        <div class="form-group"><label>Password (Optional)</label><input id="gs-pass" class="form-input" type="password"></div>
-        <div class="form-group"><label>Expiry (Minutes)</label><input id="gs-exp" class="form-input" type="number" placeholder="60"></div>
+        <div class="form-group"><label>Code Suffix (Letter)</label><input id="gs-suff" class="form-input" maxlength="1" placeholder="A-Z" autocomplete="off"></div>
+        <div class="form-group"><label>Password (Optional)</label><input id="gs-pass" class="form-input" type="password" autocomplete="new-password"></div>
+        <div class="form-group"><label>Expiry (Minutes)</label><input id="gs-exp" class="form-input" type="number" placeholder="60" autocomplete="off"></div>
         <button class="btn-primary" style="width:100%;margin-top:10px" onclick="saveGroupSettings(${gid})">Generate New Code</button>
     `;
 }
