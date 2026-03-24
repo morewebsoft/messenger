@@ -1091,7 +1091,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     .audio-time { font-size:0.75rem; font-family:monospace; color:#ccc; min-width:35px; text-align:right; }
 
     .input-area { padding:15px; background:var(--panel); display:flex; gap:10px; align-items:center; border-top:1px solid var(--border); padding-bottom: calc(15px + env(safe-area-inset-bottom)); }
-    .input-wrapper { flex:1; position:relative; }
+    .input-wrapper { flex:1; position:relative; min-width:0; }
     .reply-ctx { background:#2a2a2a; padding:6px 10px; border-radius:5px 5px 0 0; font-size:0.8rem; color:#aaa; display:none; justify-content:space-between; align-items:center; }
     input[type=text] { width:100%; padding:12px; border-radius:20px; border:none; background:var(--input-bg); color:var(--text); outline:none; box-sizing:border-box; }
     #txt { width:100%; padding:10px 12px; border-radius:20px; border:none; background:var(--input-bg); color:var(--text); outline:none; box-sizing:border-box; resize:none; height:40px; font-family:inherit; overflow-y:hidden; line-height:1.4; display:block; }
@@ -1622,7 +1622,7 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
                     <span onclick="cancelReply()" style="cursor:pointer">&times;</span>
                 </div>
                 <div id="multi-attach-ui" class="multi-attach-bar" style="display:none">
-                    <div id="multi-attach-scroll" style="display:flex;gap:8px;align-items:center;flex:1;overflow-x:auto;scrollbar-width:none"></div>
+                    <div id="multi-attach-scroll" style="display:flex;gap:8px;align-items:center;flex:1;overflow-x:auto;scrollbar-width:none;min-width:0"></div>
                     <span class="multi-attach-count" id="multi-attach-count"></span>
                     <span onclick="cancelMultiAttach()" style="cursor:pointer;padding:5px;font-size:1.3rem;color:var(--text-muted,#aaa);flex-shrink:0">&times;</span>
                 </div>
@@ -3750,6 +3750,8 @@ function renderMultiAttachPreview() {
         thumb.className = 'multi-attach-thumb';
         let img = document.createElement('img');
         img.src = item.src;
+        img.style.cursor = 'pointer';
+        img.onclick = () => openLightbox(item.src);
         let btn = document.createElement('button');
         btn.className = 'rm-btn';
         btn.innerHTML = '&times;';
