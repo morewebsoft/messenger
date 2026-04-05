@@ -432,7 +432,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // MESSAGING
     if ($action === 'send') {
-        $ts = $input['timestamp'] ?? round(microtime(true) * 1000);
+        $ts = round(microtime(true) * 1000);
         $reply = $input['reply_to'] ?? null;
         $extra = $input['extra'] ?? null;
         $type = $input['type'] ?? 'text';
@@ -459,7 +459,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare("INSERT INTO messages (group_id, from_user, message, type, reply_to_id, extra_data, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$input['group_id'], $me, $msg, $type, $reply, $extra, $ts]);
         }
-        echo json_encode(['status' => 'success']);
+        echo json_encode(['status' => 'success', 'timestamp' => $ts]);
         exit;
     }
 
@@ -480,7 +480,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else if (strpos($mime, 'video') === 0) $type = 'video';
         else if (strpos($mime, 'audio') === 0) $type = 'audio';
         $extra = $_FILES['file']['name'];
-        $ts = $_POST['timestamp'] ?? round(microtime(true) * 1000);
+        $ts = round(microtime(true) * 1000);
         $reply = $_POST['reply_to'] ?? null;
         
         if (!empty($_POST['to_user'])) {
@@ -503,7 +503,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare("INSERT INTO messages (group_id, from_user, message, type, reply_to_id, extra_data, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$_POST['group_id'], $me, $msg, $type, $reply, $extra, $ts]);
         }
-        echo json_encode(['status' => 'success']);
+        echo json_encode(['status' => 'success', 'timestamp' => $ts]);
         exit;
     }
 
@@ -2440,6 +2440,11 @@ async function store(t,i,m){
     
     if(idx === -1) {
         idx = h.findIndex(x => {
+            if (x.from_user !== m.from_user) return false;
+            if (x.pending && m.from_user === ME && !m.pending) {
+                if ((m.type === 'file' || m.type === 'image' || m.type === 'audio') && m.extra_data && x.extra_data === m.extra_data) return true;
+                if (x.message === m.message && x.type === m.type) return true;
+            }
             if (x.timestamp !== m.timestamp || x.from_user !== m.from_user) return false;
             if ((m.type === 'file' || m.type === 'image' || m.type === 'audio') && m.extra_data && x.extra_data === m.extra_data) return true;
             return x.message === m.message && x.type === m.type;
@@ -2448,11 +2453,16 @@ async function store(t,i,m){
     
     if(idx !== -1) {
         if((m.id && !h[idx].id) || (!m.pending && h[idx].pending)) {
+            let old_ts = h[idx].timestamp;
             h[idx] = m;
+            h.sort((a,b)=>a.timestamp-b.timestamp);
             await save(t,i,h);
             if(S.id==i && S.type==t) {
-                let el = document.getElementById('msg-' + m.timestamp);
-                if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                let el = document.getElementById('msg-' + old_ts);
+                if (el) {
+                    el.id = 'msg-' + m.timestamp;
+                    el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                }
             }
         }
         return;
@@ -3370,9 +3380,16 @@ async function send(){
             let h = await get(S.type, S.id);
             let m = h.find(x => x.timestamp == ts && x.message == txt);
             if(m) { 
-                delete m.pending; await save(S.type, S.id, h); 
-                let el = document.getElementById('msg-' + ts);
-                if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                delete m.pending; 
+                let old_ts = m.timestamp;
+                if (d.timestamp) m.timestamp = d.timestamp;
+                h.sort((a,b)=>a.timestamp-b.timestamp);
+                await save(S.type, S.id, h); 
+                let el = document.getElementById('msg-' + old_ts);
+                if (el) {
+                    el.id = 'msg-' + m.timestamp;
+                    el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                }
             }
         }
     } catch(e) { console.error(e); }
@@ -3627,19 +3644,39 @@ function sendLocation() {
         let ld = {message: coords, type: 'location', timestamp: ts};
         if(S.type=='dm') ld.to_user=S.id; else if(S.type=='group'||S.type=='channel') ld.group_id=S.id; else ld.group_id=-1;
         
+        let handleLocResponse = async (r) => {
+            let d = await r.json();
+            if(d.status === 'success') {
+                let h = await get(S.type, S.id);
+                let m = h.find(x => x.timestamp == ts && x.message == coords);
+                if(m) {
+                    delete m.pending;
+                    let old_ts = m.timestamp;
+                    if (d.timestamp) m.timestamp = d.timestamp;
+                    h.sort((a,b)=>a.timestamp-b.timestamp);
+                    await save(S.type, S.id, h);
+                    let el = document.getElementById('msg-' + old_ts);
+                    if(el) {
+                        el.id = 'msg-' + m.timestamp;
+                        el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                    }
+                }
+            }
+        };
+
         if (S.e2ee[S.id] && (S.type == 'dm' || S.type == 'group')) {
             try {
                 let innerPayload = JSON.stringify({ _mw_enc: true, type: 'location', msg: coords, extra: null });
                 enc(S.type, S.id, innerPayload).then(e => {
                     ld.message = e.c; ld.extra = e.extra; ld.type = 'enc';
-                    req('send', ld);
-                }).catch(err => req('send', ld)); 
+                    req('send', ld).then(handleLocResponse);
+                }).catch(err => req('send', ld).then(handleLocResponse)); 
             } catch(e) {}
         } else {
-            req('send', ld);
+            req('send', ld).then(handleLocResponse);
         }
         
-        store(S.type,S.id,{from_user:ME,message:coords,type:'location',timestamp:ts});
+        store(S.type,S.id,{from_user:ME,message:coords,type:'location',timestamp:ts, pending:true});
         scrollToBottom(true);
         document.getElementById('att-menu').style.display='none';
     }, err => { endProg(); alertModal('Error', 'Location access denied'); });
@@ -3871,9 +3908,16 @@ async function sendMediaGroup() {
             let h = await get(S.type, S.id);
             let m = h.find(x => x.timestamp==ts && x.type=='media_group');
             if(m && m.pending) {
-                delete m.pending; delete m.progress; await save(S.type, S.id, h);
-                let el = document.getElementById('msg-'+ts);
-                if(el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender')!==null, h));
+                delete m.pending; delete m.progress; 
+                let old_ts = m.timestamp;
+                if (d.timestamp) m.timestamp = d.timestamp;
+                h.sort((a,b)=>a.timestamp-b.timestamp);
+                await save(S.type, S.id, h);
+                let el = document.getElementById('msg-'+old_ts);
+                if(el) {
+                    el.id = 'msg-' + m.timestamp;
+                    el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender')!==null, h));
+                }
             }
         }
     } catch(e){ console.error('sendMediaGroup failed', e); }
@@ -3932,9 +3976,16 @@ async function sendFile(fileToSend) {
                             try { d = JSON.parse(xhr.responseText); } catch(err) { d = {status:'error'}; }
                             if(d.status === 'success') {
                                 if(m && m.pending) { 
-                                    delete m.pending; delete m.progress; await save(S.type, S.id, h); 
-                                    let el = document.getElementById('msg-' + ts);
-                                    if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                                    delete m.pending; delete m.progress; 
+                                    let old_ts = m.timestamp;
+                                    if (d.timestamp) m.timestamp = d.timestamp;
+                                    h.sort((a,b)=>a.timestamp-b.timestamp);
+                                    await save(S.type, S.id, h); 
+                                    let el = document.getElementById('msg-' + old_ts);
+                                    if (el) {
+                                        el.id = 'msg-' + m.timestamp;
+                                        el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                                    }
                                 }
                             } else {
                                 if(m && m.pending) { alertModal('Error', d.message||'Encrypted upload failed'); let idx = h.indexOf(m); if(idx!=-1) { h.splice(idx, 1); await save(S.type, S.id, h); let el = document.getElementById('msg-' + ts); if(el) el.remove(); } }
@@ -4018,9 +4069,16 @@ async function sendFile(fileToSend) {
                     }
                 } else {
                     if(m && m.pending) { 
-                        delete m.pending; delete m.progress; await save(S.type, S.id, h); 
-                        let el = document.getElementById('msg-' + ts);
-                        if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                        delete m.pending; delete m.progress; 
+                        let old_ts = m.timestamp;
+                        if (d.timestamp) m.timestamp = d.timestamp;
+                        h.sort((a,b)=>a.timestamp-b.timestamp);
+                        await save(S.type, S.id, h); 
+                        let el = document.getElementById('msg-' + old_ts);
+                        if (el) {
+                            el.id = 'msg-' + m.timestamp;
+                            el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                        }
                     }
                 }
             } catch(e) {
@@ -4281,9 +4339,16 @@ function stopRec(send){
                         let h = await get(S.type, S.id);
                         let m = h.find(x => x.timestamp == ts && x.message == r.result);
                         if(m) { 
-                            delete m.pending; await save(S.type, S.id, h); 
-                            let el = document.getElementById('msg-' + ts);
-                            if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                            delete m.pending; 
+                            let old_ts = m.timestamp;
+                            if (d.timestamp) m.timestamp = d.timestamp;
+                            h.sort((a,b)=>a.timestamp-b.timestamp);
+                            await save(S.type, S.id, h); 
+                            let el = document.getElementById('msg-' + old_ts);
+                            if (el) {
+                                el.id = 'msg-' + m.timestamp;
+                                el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                            }
                         }
                     }
                 } catch(e) {}
@@ -4923,9 +4988,16 @@ async function sendSticker(content, type='text') {
             let h = await get(S.type, S.id);
             let m = h.find(x => x.timestamp == ts && x.message == content);
             if(m) { 
-                delete m.pending; await save(S.type, S.id, h); 
-                let el = document.getElementById('msg-' + ts);
-                if (el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                delete m.pending; 
+                let old_ts = m.timestamp;
+                if (d.timestamp) m.timestamp = d.timestamp;
+                h.sort((a,b)=>a.timestamp-b.timestamp);
+                await save(S.type, S.id, h); 
+                let el = document.getElementById('msg-' + old_ts);
+                if (el) {
+                    el.id = 'msg-' + m.timestamp;
+                    el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+                }
             }
         }
     } catch(e) {}
