@@ -1128,6 +1128,12 @@ Promise.all([
     input[type=text] { width:100%; padding:12px; border-radius:20px; border:none; background:var(--input-bg); color:var(--text); outline:none; box-sizing:border-box; }
     #txt { width:100%; padding:10px 12px; border-radius:20px; border:none; background:var(--input-bg); color:var(--text); outline:none; box-sizing:border-box; resize:none; height:40px; font-family:inherit; overflow-y:hidden; line-height:1.4; display:block; }
     
+    #selection-bar { display:none; width:100%; height:100%; position:absolute; top:0; left:0; background:var(--panel); z-index:101; align-items:center; padding:0 20px; box-sizing:border-box; }
+    .msg { user-select: none; -webkit-user-select: none; }
+    .msg.selected { user-select: text; -webkit-user-select: text; background: rgba(168, 85, 247, 0.2) !important; border: 1px solid var(--accent); }
+    .msg-menu-icon { display: inline-block; padding: 0 4px; cursor: pointer; color: inherit; opacity: 0.7; margin-left: 5px; font-weight: bold; }
+    .msg-menu-icon:hover { opacity: 1; }
+    
     .btn-icon { background:none; border:none; color:#888; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:50%; transition:0.2s; width:40px; height:40px; padding:0; position:relative; flex-shrink:0; user-select:none; }
     @media (hover: hover) { .btn-icon:hover { color:#fff; background:rgba(255,255,255,0.1); } }
     .btn-icon:active { transform: scale(0.9); background:rgba(255,255,255,0.15); }
@@ -1217,7 +1223,7 @@ Promise.all([
     @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
     
     /* Emoji Drawer / Sidebar */
-    .emoji-drawer { background: var(--panel); display: none; flex-direction: column; z-index: 90; }
+    .emoji-drawer { background: var(--panel); display: none; flex-direction: column; z-index: 90; flex-shrink: 0; }
     .emoji-tabs { display: flex; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.1); }
     .emoji-tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; color: #888; transition: 0.2s; font-size: 0.9rem; font-weight: 500; }
     .emoji-tab:hover { background: rgba(255,255,255,0.05); }
@@ -1237,15 +1243,14 @@ Promise.all([
     @media (min-width: 851px) {
         .main-view { flex-direction: row; }
         #chat-view { width: auto !important; flex: 1; }
-        .emoji-drawer { width: 300px; border-left: 1px solid var(--border); height: 100%; position: relative; animation: slideLeft 0.2s ease-out; }
-        .emoji-drawer.popover { position: absolute; bottom: 80px; left: 20px; width: 320px; height: 400px; border-radius: 8px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid var(--border); animation: fadeUp 0.1s ease-out; z-index: 100; }
+        .emoji-drawer { position: absolute; bottom: 80px; left: 20px; width: 320px; height: 400px; border-radius: 8px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 1px solid var(--border); animation: fadeUp 0.1s ease-out; z-index: 100; }
         @keyframes slideLeft { from { width: 0; opacity: 0; } to { width: 300px; opacity: 1; } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     }
     @media (max-width: 850px) {
         .emoji-drawer {
-            position: absolute;
-            bottom: 0; left: 0; width: 100%;
+            position: relative;
+            width: 100%;
             height: 280px;
             border-top: 1px solid var(--border);
             animation: slideUp 0.2s ease-out;
@@ -1297,19 +1302,6 @@ Promise.all([
         .messages { padding: 10px; }
         .desktop-only { display: none !important; }
         .mobile-only { display: block !important; }
-        
-        /* Mobile Context Menu (Bottom Sheet) */
-        .ctx-menu {
-            top: auto !important; bottom: 0 !important; left: 0 !important;
-            width: 100%; min-width: 100%;
-            border-radius: 16px 16px 0 0;
-            border: none; 
-            border-top: 1px solid var(--border);
-            box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-            animation: slideUp 0.2s cubic-bezier(0.1, 0.9, 0.2, 1);
-            padding-bottom: env(safe-area-inset-bottom);
-        }
-        .ctx-menu::before { content: ''; display: block; width: 40px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin: 12px auto 8px auto; }
         .ctx-item { padding: 16px 24px; font-size: 1.05rem; }
         .ctx-reactions { padding: 20px 10px; gap: 15px; justify-content: center; }
         .ctx-reaction { font-size: 1.8rem; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
@@ -1613,6 +1605,16 @@ Promise.all([
     <div class="main-view" id="main-view">
         <div id="chat-view" style="display:flex;flex-direction:column;height:100%;width:100%;position:relative">
         <div class="chat-header">
+            <div id="selection-bar">
+                <div class="btn-icon" onclick="clearSelection()">&times;</div>
+                <div id="sel-count" style="flex:1; margin-left:15px; font-weight:bold">1 Selected</div>
+                <div class="btn-icon" onclick="copySelected()" id="sel-copy-btn" style="margin-right:10px">
+                    <svg viewBox="0 0 24 24" width="20" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                </div>
+                <div class="btn-icon red-text" onclick="deleteSelected()">
+                    <svg viewBox="0 0 24 24" width="20" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.12-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </div>
+            </div>
             <div style="display:flex;align-items:center">
                 <div class="back-btn" onclick="closeChat()" style="cursor:pointer">&larr;</div>
                 <div class="avatar chat-info-clickable" id="chat-av" onclick="showProfilePopup()"></div>
@@ -1715,7 +1717,6 @@ Promise.all([
                 <span class="att-label" data-i18n="location">Location</span>
             </div>
         </div>
-        </div>
         
         <!-- Emoji Drawer -->
         <div id="emoji-drawer" class="emoji-drawer">
@@ -1726,6 +1727,7 @@ Promise.all([
             </div>
             <div id="emoji-content" class="emoji-content emoji-grid"></div>
         </div>
+        </div> <!-- End of chat-view -->
         
         <!-- OBSERVATORY VIEW -->
         <div id="observatory-view" style="display:none;flex-direction:column;height:100%;width:100%;overflow-y:auto;background:var(--bg)" <?php if ($lightweightMode) echo 'hidden'; ?>>
@@ -1797,7 +1799,7 @@ async function setSafeVideoSrc(videoEl, dataUri) {
     if(vidObserver) vidObserver.observe(videoEl);
 }
 
-let S = { tab:'chats', id:null, type:null, reply:null, ctx:null, dms:{}, groups:{}, online:[], profiles:{}, notifs:[], keys:{pub:null,priv:null}, e2ee:{}, weSyncReqSent:{}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9), stickers:[], gifs:[] };
+let S = { tab:'chats', id:null, type:null, reply:null, editMsgId:null, ctx:null, dms:{}, groups:{}, online:[], profiles:{}, notifs:[], keys:{pub:null,priv:null}, e2ee:{}, weSyncReqSent:{}, scroll:{}, ackDms:[], groupCursors:{}, wsync:{peers:{}, dc:{}}, deviceId: localStorage.getItem('mw_did') || Math.random().toString(36).substr(2,9), stickers:[], gifs:[] };
 localStorage.setItem('mw_did', S.deviceId);
 
 const TR = {
@@ -2268,6 +2270,16 @@ async function poll(){
                     }
                 } 
             }
+            if(m.type == 'edit') {
+                let h = await get('dm', m.from_user);
+                let orig = h.find(x => x.timestamp == m.extra_data);
+                if(orig) {
+                    orig.message = m.message; orig.edited = true;
+                    await save('dm', m.from_user, h);
+                    if(S.id==m.from_user && S.type=='dm') { let el = document.getElementById('msg-' + m.extra_data); if(el) el.replaceWith(createMsgNode(orig, el.querySelector('.msg-sender') !== null, h)); }
+                }
+                continue;
+            }
             await store('dm',m.from_user,m);
             let prev = m.type==='text' ? m.message : '['+m.type+']';
             notify(m.from_user, prev, 'dm');
@@ -2346,12 +2358,32 @@ async function poll(){
                     m.type='text';
                 }
             }
+            if(m.type == 'edit') {
+                let h = await get(type, m.group_id);
+                let orig = h.find(x => x.timestamp == m.extra_data);
+                if(orig) {
+                    orig.message = m.message; orig.edited = true;
+                    await save(type, m.group_id, h);
+                    if(S.id==m.group_id && S.type==type) { let el = document.getElementById('msg-' + m.extra_data); if(el) el.replaceWith(createMsgNode(orig, el.querySelector('.msg-sender') !== null, h)); }
+                }
+                continue;
+            }
             await store(type,m.group_id,m); 
             let prev = m.type==='text' ? m.message : '['+m.type+']';
             notify(m.group_id, prev, type); 
         }
         for(let m of d.public_msgs){
             if(m.type=='delete'){ await removeMsg('public','global',m.extra_data); continue; }
+            if(m.type == 'edit') {
+                let h = await get('public', 'global');
+                let orig = h.find(x => x.timestamp == m.extra_data);
+                if(orig) {
+                    orig.message = m.message; orig.edited = true;
+                    await save('public', 'global', h);
+                    if(S.type=='public') { let el = document.getElementById('msg-' + m.extra_data); if(el) el.replaceWith(createMsgNode(orig, el.querySelector('.msg-sender') !== null, h)); }
+                }
+                continue;
+            }
             await store('public','global',m);
             notify('global', m.message, 'public');
         }
@@ -3223,8 +3255,9 @@ function createMsgNode(m, showSender, history){
         reactDisplay += '</div>';
     }
 
-
-    div.innerHTML=`${sender}${rep}${txt}<div class="msg-meta">${new Date(m.timestamp > 9999999999 ? m.timestamp : m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} ${stat}</div>${reactDisplay}`;
+    let editedHtml = m.edited ? '<span style="font-size:0.65rem;font-style:italic;margin-right:4px">edited</span>' : '';
+    let menuIcon = `<div class="msg-menu-icon" onclick="openMsgMenu(event, ${m.timestamp})">⋮</div>`;
+    div.innerHTML=`${sender}${rep}${txt}<div class="msg-meta">${editedHtml}${new Date(m.timestamp > 9999999999 ? m.timestamp : m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} ${stat}${menuIcon}</div>${reactDisplay}`;
     
     div.oncontextmenu=(e)=>{
         e.preventDefault();
@@ -3232,11 +3265,11 @@ function createMsgNode(m, showSender, history){
     };    
     let touchTimer;
     div.addEventListener('touchstart', (e) => {
+        if(e.target.closest('.msg-menu-icon')) return;
         touchTimer = setTimeout(() => {
             window.isLongPress = true;
             setTimeout(()=>window.isLongPress=false, 500);
-            // Long press detected
-            showContextMenu(e, 'message', m);
+            toggleSelection(m.timestamp);
         }, 500); // Adjust timing as needed
     });
 
@@ -3252,11 +3285,13 @@ function createMsgNode(m, showSender, history){
         clearTimeout(touchTimer);
     });
 
-    div.onclick=()=>{
-        if (touchTimer) {
-            clearTimeout(touchTimer);
+    div.onclick=(e)=>{
+        if (touchTimer) clearTimeout(touchTimer);
+        if(selectedMsgs.size > 0) {
+            if(!e.target.closest('.msg-menu-icon')) {
+                toggleSelection(m.timestamp);
+            }
         }
-        
     };
     div.ondblclick=()=>{ sendReact(m.timestamp, '❤️'); };
 
@@ -3291,6 +3326,7 @@ function createMsgNode(m, showSender, history){
 }
 
 async function renderChat(){
+    clearSelection();
     let h = await get(S.type,S.id);
     let c = document.getElementById('msgs');
     if(!c) return;
@@ -3319,6 +3355,7 @@ async function renderChat(){
 }
 
 function closeChat() {
+    clearSelection();
     if(S.id) {
         let c=document.getElementById('msgs');
         if(c.scrollHeight - c.scrollTop - c.clientHeight > 50) S.scroll[S.type+'_'+S.id] = c.scrollTop;
@@ -3346,6 +3383,36 @@ async function send(){
     inputEl.value=''; 
     document.getElementById('txt').style.height='40px'; toggleMainBtn();
     if(navigator.vibrate) navigator.vibrate(20);
+    
+    if(S.editMsgId) {
+        let editId = S.editMsgId;
+        S.editMsgId = null;
+        cancelReply();
+        
+        let h = await get(S.type, S.id);
+        let m = h.find(x => x.timestamp == editId);
+        if(m) {
+            m.message = txt;
+            m.edited = true;
+            await save(S.type, S.id, h);
+            let el = document.getElementById('msg-' + editId);
+            if(el) el.replaceWith(createMsgNode(m, el.querySelector('.msg-sender') !== null, h));
+        }
+        
+        let load = { message: txt, type: 'edit', extra: editId, timestamp: Date.now() };
+        if(S.type=='dm') load.to_user=S.id; else if(S.type=='group'||S.type=='channel') load.group_id=S.id; else if(S.type=='public') load.group_id=-1;
+        
+        if(S.e2ee[S.id] && (S.type=='dm'||S.type=='group')) {
+            try {
+                let innerPayload = JSON.stringify({ _mw_enc: true, type: 'edit', msg: txt, extra: editId });
+                let e = await enc(S.type, S.id, innerPayload);
+                load.message=e.c; load.extra=e.extra; load.type='enc';
+            } catch(e) { console.error('Encryption failed for edit', e); }
+        }
+        req('send', load);
+        return;
+    }
+    
     let replyId = S.reply;
     cancelReply();
     
@@ -3395,6 +3462,81 @@ async function send(){
     } catch(e) { console.error(e); }
 }
 
+// --- SELECTION LOGIC ---
+let selectedMsgs = new Set();
+function toggleSelection(ts) {
+    if (selectedMsgs.has(ts)) {
+        selectedMsgs.delete(ts);
+        let el = document.getElementById('msg-'+ts);
+        if(el) el.classList.remove('selected');
+    } else {
+        selectedMsgs.add(ts);
+        let el = document.getElementById('msg-'+ts);
+        if(el) el.classList.add('selected');
+    }
+    updateSelectionBar();
+}
+function clearSelection() {
+    selectedMsgs.forEach(ts => {
+        let el = document.getElementById('msg-'+ts);
+        if(el) el.classList.remove('selected');
+    });
+    selectedMsgs.clear();
+    updateSelectionBar();
+}
+function updateSelectionBar() {
+    let bar = document.getElementById('selection-bar');
+    if (selectedMsgs.size > 0) {
+        bar.style.display = 'flex';
+        document.getElementById('sel-count').innerText = selectedMsgs.size + ' Selected';
+        let copyBtn = document.getElementById('sel-copy-btn');
+        if(copyBtn) copyBtn.style.display = selectedMsgs.size === 1 ? 'flex' : 'none';
+    } else {
+        bar.style.display = 'none';
+    }
+}
+async function copySelected() {
+    if(selectedMsgs.size === 1) {
+        let ts = Array.from(selectedMsgs)[0];
+        let h = await get(S.type, S.id);
+        let m = h.find(x => x.timestamp == ts);
+        if(m && m.type == 'text') {
+            navigator.clipboard.writeText(m.message);
+            showToast('Copied to clipboard');
+        } else {
+            showToast('Only text can be copied');
+        }
+    }
+    clearSelection();
+}
+function deleteSelected() {
+    let cbHtml = `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:15px"><input type="checkbox" id="del-everyone" checked> Delete for everyone</label>`;
+    confirmModal("Delete Messages", `Are you sure you want to delete ${selectedMsgs.size} message(s)?${cbHtml}`, async (confirmed) => {
+        if(!confirmed) return;
+        let delEveryone = document.getElementById('del-everyone') ? document.getElementById('del-everyone').checked : false;
+        let h = await get(S.type, S.id);
+        for(let ts of selectedMsgs) {
+            let m = h.find(x => x.timestamp == ts);
+            if(m) {
+                if(delEveryone && m.from_user == ME) {
+                    let ld={message:'DEL', type:'delete', extra:ts};
+                    if(S.type=='dm')ld.to_user=S.id; else if(S.type=='group'||S.type=='channel') ld.group_id=S.id; else if(S.type=='public') ld.group_id=-1;
+                    req('send', ld);
+                }
+                await removeMsg(S.type, S.id, ts);
+            }
+        }
+        clearSelection();
+    });
+}
+
+window.openMsgMenu = async function(e, ts) {
+    e.stopPropagation();
+    let h = await get(S.type, S.id);
+    let m = h.find(x => x.timestamp == ts);
+    if(m) showContextMenu(e, 'message', m);
+}
+
 // --- CONTEXT MENU ---
 function showContextMenu(e, type, data) {
     const t = TR[curLang];
@@ -3405,6 +3547,8 @@ function showContextMenu(e, type, data) {
     
     if(type == 'message') {
         let myReact = (data.reacts && data.reacts[ME]) ? data.reacts[ME] : null;
+        let isMine = data.from_user === ME;
+        let isText = data.type === 'text';
         html = `<div class="ctx-reactions">
         <span class="ctx-reaction ${myReact=='❤️'?'active-reaction':''}" onclick="ctxAction('react','❤️')">❤️</span>
         <span class="ctx-reaction ${myReact=='😂'?'active-reaction':''}" onclick="ctxAction('react','😂')">😂</span>
@@ -3413,6 +3557,7 @@ function showContextMenu(e, type, data) {
         <span class="ctx-reaction ${myReact=='👍'?'active-reaction':''}" onclick="ctxAction('react','👍')">👍</span>
         </div>
         <div class="ctx-item" onclick="ctxAction('reply')">Reply</div>
+        ${isMine && isText ? `<div class="ctx-item" onclick="ctxAction('edit')">Edit</div>` : ''}
         <div class="ctx-item" onclick="ctxAction('forward')">Forward</div>
         <div class="ctx-item" onclick="ctxAction('copy')">Copy</div>
         <div class="ctx-item" onclick="ctxAction('pin')">Pin Message</div>
@@ -3433,17 +3578,19 @@ function showContextMenu(e, type, data) {
     menu.innerHTML = html;
     menu.style.display = 'block';
     
-    if (window.innerWidth > 850) {
-        let x = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-        let y = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
-        if (x + menu.offsetWidth > window.innerWidth) x -= menu.offsetWidth;
-        if (y + menu.offsetHeight > window.innerHeight) y -= menu.offsetHeight;
-        menu.style.left = x + 'px';
-        menu.style.top = y + 'px';
-    } else {
-        menu.style.left = '';
-        menu.style.top = '';
+    let x = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : window.innerWidth / 2);
+    let y = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : window.innerHeight / 2);
+    if(e.type === 'click' && e.target.classList.contains('msg-menu-icon')) {
+        let rect = e.target.getBoundingClientRect();
+        x = rect.left; y = rect.bottom;
     }
+    menu.style.visibility = 'hidden';
+    menu.style.display = 'block';
+    if (x + menu.offsetWidth > window.innerWidth) x = window.innerWidth - menu.offsetWidth - 10;
+    if (y + menu.offsetHeight > window.innerHeight) y = window.innerHeight - menu.offsetHeight - 10;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.visibility = 'visible';
     if(navigator.vibrate) navigator.vibrate(30);
 }
 
@@ -3462,6 +3609,15 @@ async function ctxAction(act, arg) {
             else await sendReact(m.timestamp, arg);
         }
         else if(act=='reply') { S.reply=m.timestamp; document.getElementById('reply-ui').style.display='flex'; let snip=m.type=='text'?esc(m.message).substring(0,30):'['+m.type+']'; document.getElementById('reply-txt').innerHTML=`<div style="font-size:0.75rem;color:var(--accent);margin-bottom:2px">Replying to ${m.from_user}</div><div style="color:var(--text);opacity:0.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${snip}</div>`; document.getElementById('del-btn').style.display='none'; document.getElementById('txt').focus(); }
+        else if(act=='edit') {
+            S.editMsgId = m.timestamp;
+            document.getElementById('reply-ui').style.display='flex';
+            document.getElementById('reply-txt').innerHTML=`<div style="font-size:0.75rem;color:var(--accent);margin-bottom:2px">Editing message</div><div style="color:var(--text);opacity:0.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.message).substring(0,30)}</div>`;
+            document.getElementById('del-btn').style.display='none';
+            document.getElementById('txt').value = m.message;
+            document.getElementById('txt').focus();
+            toggleMainBtn();
+        }
         else if(act=='forward') promptModal("Forward", "Username:", u=>{ if(u) req('send',{message:m.message,type:m.type,extra:m.extra_data,to_user:u}); });
         else if(act=='copy') { if(m.type=='text') { navigator.clipboard.writeText(m.message); showToast('Copied to clipboard'); } }
         else if(act=='pin') { 
@@ -4122,7 +4278,7 @@ function downloadFile(data, name){
     let a = document.createElement('a'); a.href = data; a.download = name; a.click();
 }
 
-function cancelReply(){ S.reply=null; document.getElementById('reply-ui').style.display='none'; document.getElementById('del-btn').style.display='none'; }
+function cancelReply(){ S.reply=null; S.editMsgId=null; document.getElementById('reply-ui').style.display='none'; document.getElementById('del-btn').style.display='none'; }
 function cancelFile() {
     pendingFile = null;
     document.getElementById('file-preview-ui').style.display = 'none';
@@ -4360,6 +4516,7 @@ function stopRec(send){
 }
 
 function playAudio(btn) {
+    if (selectedMsgs.size > 0) return;
     let player = btn.parentElement.querySelector('audio');
     let bar = btn.parentElement.querySelector('.audio-bar');
     let timeDisplay = btn.parentElement.querySelector('.audio-time');
@@ -4761,25 +4918,12 @@ drw.onmouseleave = () => {
 
 function toggleEmojiDrawer() {
     let d = document.getElementById('emoji-drawer');
-    if(window.innerWidth <= 850) {
-        let wasVisible = d.style.display === 'flex';
-        document.getElementById('att-menu').style.display = 'none';
-        d.style.display = wasVisible ? 'none' : 'flex';
-        if(!wasVisible) switchEmojiTab(currentEmojiTab);
-        return;
-    }
-    
+    let wasVisible = d.style.display === 'flex';
     document.getElementById('att-menu').style.display = 'none';
+    d.style.display = wasVisible ? 'none' : 'flex';
+    if(!wasVisible) switchEmojiTab(currentEmojiTab);
     
-    if(emojiPinned) {
-        emojiPinned = false;
-        d.style.display = 'none';
-    } else {
-        emojiPinned = true;
-        d.classList.remove('popover');
-        d.style.display = 'flex';
-        switchEmojiTab(currentEmojiTab);
-    }
+    if(window.innerWidth > 850) emojiPinned = !wasVisible;
 }
 
 function switchEmojiTab(tab) {
@@ -5158,6 +5302,7 @@ let lbScale=1, lbX=0, lbY=0, lbIsDragging=false, lbStartX=0, lbStartY=0, lbPinch
 const lbImg = document.getElementById('lb-img');
 
 function openLightbox(src) {
+    if (selectedMsgs.size > 0) return;
     document.getElementById('lightbox').style.display = 'flex';
     lbImg.src = src;
     lbScale=1; lbX=0; lbY=0; updateLbTransform();
