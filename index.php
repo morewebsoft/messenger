@@ -833,29 +833,19 @@ loadData();
     body.login-process #login-bg { opacity: 1; }
 
     /* Splash Screen */
-    .splash-screen {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background-color: #000000; z-index: 9999;
-        display: flex; justify-content: center; align-items: center;
-        animation: screenFadeOut 0.5s ease-in-out 0.2s forwards;
-        pointer-events: none;
-    }
-    .splash-screen .word {
-        color: #FFFFFF; font-family: 'Poppins', sans-serif; font-weight: 100; font-size: clamp(8rem, 15vw, 10rem);
-        display: grid; grid-template-columns: auto auto; justify-items: center;
-        line-height: 0.8; gap: 0.15em; text-shadow: 0 0 30px #bf00ff; direction: ltr;
-        animation: fadeWordOut 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53) 0.5s forwards;
-    }
-    .splash-screen .word span { opacity: 0; position: relative; }
-
+    .splash-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #000000; z-index: 9999; display: flex; justify-content: center; align-items: center; pointer-events: none; transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .splash-screen .word { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.15em; color: #FFFFFF; font-family: 'Poppins', sans-serif; font-weight: 100; font-size: clamp(8rem, 15vw, 10rem); line-height: 0.8; text-shadow: 0 0 30px #bf00ff; direction: ltr; opacity: 0; }
+    .splash-screen .letter { display: flex; justify-content: center; align-items: center; }
+    .splash-screen .m-letter { position: relative; display: inline-flex; justify-content: center; align-items: center; border-radius: 50%; }
+    .splash-screen .m-letter::after { content: ''; position: absolute; top: 53%; left: 50%; width: 2.2em; height: 2.2em; border: 2px solid rgba(191, 0, 255, 0.15); border-top: 2px solid #bf00ff; border-radius: 50%; opacity: 0; pointer-events: none; box-shadow: 0 0 20px rgba(191, 0, 255, 0.4); }
+    .fonts-loaded .splash-screen .word { opacity: 1; animation: focusOnM 0.7s cubic-bezier(0.76, 0, 0.24, 1) 0.2s forwards; }
+    .fonts-loaded .splash-screen .letter-fade { animation: fadeOut 0.7s cubic-bezier(0.76, 0, 0.24, 1) 0.2s forwards; }
+    .fonts-loaded .splash-screen .m-letter::after { animation: fadeInRing 0.7s cubic-bezier(0.76, 0, 0.24, 1) 0.2s forwards, spinRing 1.2s linear 0.2s infinite; }
+    @keyframes focusOnM { 0% { transform: scale(1) translate(0, 0); } 100% { transform: scale(0.7) translate(25%, 25%); } }
+    @keyframes fadeOut { 0% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes fadeInRing { 0% { opacity: 0; } 100% { opacity: 1; } }
+    @keyframes spinRing { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
     @keyframes letterAppear { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-    @keyframes fadeWordOut { from { opacity: 1; transform: scale(1); filter: blur(0); } to { opacity: 0; transform: scale(1.1); filter: blur(10px); } }
-    @keyframes screenFadeOut { to { opacity: 0; visibility: hidden; } }
-
-    .splash-screen .word span:nth-child(1) { animation: letterAppear 0.3s ease-out 0.0s forwards; }
-    .splash-screen .word span:nth-child(2) { animation: letterAppear 0.3s ease-out 0.1s forwards; }
-    .splash-screen .word span:nth-child(3) { animation: letterAppear 0.3s ease-out 0.2s forwards; }
-    .splash-screen .word span:nth-child(4) { animation: letterAppear 0.3s ease-out 0.3s forwards; }
 
     .lang-toggle { position: absolute; top: 20px; right: 20px; display: flex; gap: 15px; z-index: 20; }
     .lang-opt { font-weight: 500; color: #9aa0a6; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
@@ -881,8 +871,13 @@ loadData();
 </head>
 <body>
 
-<div class="splash-screen">
-    <div class="word"><span>m</span><span>o</span><span>r</span><span>e</span></div>
+<div class="splash-screen" id="login-splash">
+    <div class="word">
+        <div class="letter"><span class="m-letter">m</span></div>
+        <div class="letter letter-fade">o</div>
+        <div class="letter letter-fade">r</div>
+        <div class="letter letter-fade">e</div>
+    </div>
 </div>
 
 <div class="lang-toggle">
@@ -968,6 +963,25 @@ if(localStorage.getItem('mw_auth_token')){
 }
 setLang(curLang);
 if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
+
+Promise.all([
+    new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve)),
+    document.fonts.ready
+]).then(() => {
+    document.body.classList.add('fonts-loaded');
+    const splash = document.getElementById('login-splash');
+    if (splash) {
+        const word = splash.querySelector('.word');
+        word.addEventListener('animationend', (e) => {
+            if (e.animationName === 'focusOnM') {
+                setTimeout(() => {
+                    splash.style.opacity = '0';
+                    setTimeout(() => { splash.remove(); }, 400);
+                }, 250); 
+            }
+        });
+    }
+});
 </script></body></html>
 <?php exit; } ?>
 
@@ -1303,14 +1317,19 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
     @media (min-width: 851px) { .back-btn { display:none; } .mobile-only { display: none !important; } }
 
     /* Splash Screen Main App */
-    .splash-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #000000; z-index: 9999; display: flex; justify-content: center; align-items: center; pointer-events: none; }
-    .splash-screen .word { color: #FFFFFF; font-family: 'Poppins', sans-serif; font-weight: 100; font-size: clamp(8rem, 15vw, 10rem); display: grid; grid-template-columns: auto auto; justify-items: center; line-height: 0.8; gap: 0.15em; text-shadow: 0 0 30px #bf00ff; direction: ltr; }
-    .splash-screen .word span { opacity: 0; position: relative; }
+    .splash-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #000000; z-index: 9999; display: flex; justify-content: center; align-items: center; pointer-events: none; transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .splash-screen .word { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 0.15em; color: #FFFFFF; font-family: 'Poppins', sans-serif; font-weight: 100; font-size: clamp(8rem, 15vw, 10rem); line-height: 0.8; text-shadow: 0 0 30px #bf00ff; direction: ltr; opacity: 0; }
+    .splash-screen .letter { display: flex; justify-content: center; align-items: center; }
+    .splash-screen .m-letter { position: relative; display: inline-flex; justify-content: center; align-items: center; border-radius: 50%; }
+    .splash-screen .m-letter::after { content: ''; position: absolute; top: 53%; left: 50%; width: 2.2em; height: 2.2em; border: 2px solid rgba(191, 0, 255, 0.15); border-top: 2px solid #bf00ff; border-radius: 50%; opacity: 0; pointer-events: none; box-shadow: 0 0 20px rgba(191, 0, 255, 0.4); }
+    .fonts-loaded .splash-screen .word { opacity: 1; animation: focusOnM 0.7s cubic-bezier(0.76, 0, 0.24, 1) 0.2s forwards; }
+    .fonts-loaded .splash-screen .letter-fade { animation: fadeOut 0.7s cubic-bezier(0.76, 0, 0.24, 1) 0.2s forwards; }
+    .fonts-loaded .splash-screen .m-letter::after { animation: fadeInRing 0.7s cubic-bezier(0.76, 0, 0.24, 1) 0.2s forwards, spinRing 1.2s linear 0.2s infinite; }
+    @keyframes focusOnM { 0% { transform: scale(1) translate(0, 0); } 100% { transform: scale(0.7) translate(25%, 25%); } }
+    @keyframes fadeOut { 0% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes fadeInRing { 0% { opacity: 0; } 100% { opacity: 1; } }
+    @keyframes spinRing { 0% { transform: translate(-50%, -50%) rotate(0deg); } 100% { transform: translate(-50%, -50%) rotate(360deg); } }
     @keyframes letterAppear { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-    .splash-screen .word span:nth-child(1) { animation: letterAppear 0.3s ease-out 0.0s forwards; }
-    .splash-screen .word span:nth-child(2) { animation: letterAppear 0.3s ease-out 0.1s forwards; }
-    .splash-screen .word span:nth-child(3) { animation: letterAppear 0.3s ease-out 0.2s forwards; }
-    .splash-screen .word span:nth-child(4) { animation: letterAppear 0.3s ease-out 0.3s forwards; }
 
     /* Connection Indicator */
     .conn-indicator { padding: 6px 0 0 0; height: 22px; display: flex; align-items: center; justify-content: center; transition: 0.3s; flex-shrink: 0; cursor: pointer; }
@@ -1373,7 +1392,12 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
 <body>
 
 <div id="app-splash" class="splash-screen">
-    <div class="word"><span>m</span><span>o</span><span>r</span><span>e</span></div>
+    <div class="word">
+        <div class="letter"><span class="m-letter">m</span></div>
+        <div class="letter letter-fade">o</div>
+        <div class="letter letter-fade">r</div>
+        <div class="letter letter-fade">e</div>
+    </div>
 </div>
 
 <!-- LOADING SYSTEM -->
@@ -3018,9 +3042,6 @@ async function renderLists(){
         updateListDOM('list-groups', groupsList, renderGroupItem);
         updateListDOM('list-channels', channelsList, renderGroupItem);
     } catch(e) { console.error("RenderLists error", e); }
-    finally {
-        let sp=document.getElementById('app-splash'); if(sp){ sp.style.transition='opacity 0.2s'; sp.style.opacity=0; setTimeout(()=>sp.remove(),200); }
-    }
 }
 
 async function openChat(t,i){
@@ -5143,6 +5164,25 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('?action=sw');
 init().catch(e=>console.error(e));
 
 setTimeout(() => sendWSyncSignal('hello'), 2000);
+
+Promise.all([
+    new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve)),
+    document.fonts.ready
+]).then(() => {
+    document.body.classList.add('fonts-loaded');
+    const splash = document.getElementById('app-splash');
+    if (splash) {
+        const word = splash.querySelector('.word');
+        word.addEventListener('animationend', (e) => {
+            if (e.animationName === 'focusOnM') {
+                setTimeout(() => {
+                    splash.style.opacity = '0';
+                    setTimeout(() => { splash.remove(); }, 400);
+                }, 250); 
+            }
+        });
+    }
+});
 
 </script>
 </body>
