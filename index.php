@@ -1913,13 +1913,13 @@ function showModal(title, type, placeholder, callback) {
         cc.style.display = 'block';
     } else if(type === 'confirm') {
         bd.style.display = 'block';
-        bd.innerText = placeholder;
+            bd.innerHTML = placeholder;
         ip.style.display = 'none';
         cc.style.display = 'block';
         ok.innerText = 'Accept';
     } else {
         bd.style.display = 'block';
-        bd.innerText = placeholder; // In alert mode, placeholder is body text
+            bd.innerHTML = placeholder; // In alert mode, placeholder is body text
         ip.style.display = 'none';
         cc.style.display = 'none';
     }
@@ -3632,7 +3632,7 @@ async function ctxAction(act, arg) {
                 if (el) el.replaceWith(createMsgNode(t, el.querySelector('.msg-sender') !== null, h));
             } 
         }
-      else if(act=='details') alertModal("Details", `From: ${m.from_user}\nSent: ${new Date(m.timestamp > 9999999999 ? m.timestamp : m.timestamp*1000).toLocaleString()}`);
+      else if(act=='details') alertModal("Details", `From: ${m.from_user}<br>Sent: ${new Date(m.timestamp > 9999999999 ? m.timestamp : m.timestamp*1000).toLocaleString()}`);
         else if(act=='delete') { if(m.from_user!=ME)return; S.reply=m.timestamp; await deleteMsg(); }
     } else if(c.type == 'chat_list') {
         let d = c.data;
